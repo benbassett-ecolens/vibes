@@ -29,11 +29,13 @@ export interface Metric {
   entries: Record<string, number>
 }
 
+export type RockStatus = 'on_track' | 'off_track' | 'completed'
+
 export interface Milestone {
   id: string
   name: string
   ownerId: string
-  done: boolean
+  status: RockStatus
   dueDate: string
 }
 
@@ -42,7 +44,7 @@ export interface Rock {
   name: string
   ownerId: string
   dueDate: string
-  completed: boolean
+  status: RockStatus
   /** Empty string = no blocker */
   blocker: string
   milestones: Milestone[]

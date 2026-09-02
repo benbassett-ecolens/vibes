@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Rock } from '../types'
 import { useApp } from '../store'
-import { EmptyState, PersonSelect } from './common'
+import { EmptyState, PersonSelect, StatusSelect } from './common'
 
 function daysUntil(dateStr: string): number | null {
   if (!dateStr) return null
@@ -17,7 +17,7 @@ function RockCard({ rock }: { rock: Rock }) {
   const [msName, setMsName] = useState('')
   const [msOwnerId, setMsOwnerId] = useState('')
 
-  const done = rock.milestones.filter((m) => m.done).length
+  const done = rock.milestones.filter((m) => m.status === 'completed').length
   const total = rock.milestones.length
   const pct = total === 0 ? 0 : Math.round((done / total) * 100)
   const days = daysUntil(rock.dueDate)
@@ -29,15 +29,13 @@ function RockCard({ rock }: { rock: Rock }) {
   }
 
   return (
-    <article className={`rock-card ${rock.completed ? 'rock-done' : ''}`}>
+    <article className={`rock-card ${rock.status === 'completed' ? 'rock-done' : ''}`}>
       <header className="rock-head">
-        <label className="check-lg" title="Mark Rock complete">
-          <input
-            type="checkbox"
-            checked={rock.completed}
-            onChange={(e) => actions.updateRock(rock.id, { completed: e.target.checked })}
-          />
-        </label>
+        <StatusSelect
+          value={rock.status}
+          onChange={(status) => actions.updateRock(rock.id, { status })}
+          title="Rock status"
+        />
         <input
           className="ghost rock-title"
           value={rock.name}
@@ -70,12 +68,11 @@ function RockCard({ rock }: { rock: Rock }) {
             onChange={(e) => actions.updateRock(rock.id, { dueDate: e.target.value })}
           />
         </label>
-        {days != null && !rock.completed && (
+        {days != null && rock.status !== 'completed' && (
           <span className={`badge ${days < 0 ? 'badge-bad' : days <= 14 ? 'badge-warn' : 'badge-ok'}`}>
             {days < 0 ? `${-days}d overdue` : `${days}d left`}
           </span>
         )}
-        {rock.completed && <span className="badge badge-ok">Complete</span>}
       </div>
 
       <label className="blocker">
@@ -97,13 +94,13 @@ function RockCard({ rock }: { rock: Rock }) {
       <ul className="milestones">
         {rock.milestones.map((ms) => (
           <li key={ms.id}>
-            <input
-              type="checkbox"
-              checked={ms.done}
-              onChange={(e) => actions.updateMilestone(rock.id, ms.id, { done: e.target.checked })}
+            <StatusSelect
+              value={ms.status}
+              onChange={(status) => actions.updateMilestone(rock.id, ms.id, { status })}
+              title="Milestone status"
             />
             <input
-              className={`ghost grow ${ms.done ? 'strike' : ''}`}
+              className={`ghost grow ${ms.status === 'completed' ? 'strike' : ''}`}
               value={ms.name}
               onChange={(e) => actions.updateMilestone(rock.id, ms.id, { name: e.target.value })}
             />

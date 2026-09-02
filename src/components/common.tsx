@@ -1,4 +1,37 @@
+import type { RockStatus } from '../types'
 import { useApp } from '../store'
+
+const STATUS_LABEL: Record<RockStatus, string> = {
+  on_track: 'On Track',
+  off_track: 'Off Track',
+  completed: 'Completed',
+}
+
+/** The 3-way status selector used on Rocks and their milestones. */
+export function StatusSelect({
+  value,
+  onChange,
+  title,
+}: {
+  value: RockStatus
+  onChange: (status: RockStatus) => void
+  title?: string
+}) {
+  return (
+    <select
+      className={`status-select status-${value}`}
+      value={value}
+      title={title}
+      onChange={(e) => onChange(e.target.value as RockStatus)}
+    >
+      {(Object.keys(STATUS_LABEL) as RockStatus[]).map((s) => (
+        <option key={s} value={s}>
+          {STATUS_LABEL[s]}
+        </option>
+      ))}
+    </select>
+  )
+}
 
 export function PersonSelect({
   value,

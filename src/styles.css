@@ -592,10 +592,32 @@ tbody tr:last-child td {
   gap: 8px;
 }
 
-.check-lg input {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--accent);
+/* Status selector: On Track / Off Track / Completed, used on Rocks and milestones */
+.status-select {
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.status-select.status-on_track {
+  background: var(--panel-2);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+.status-select.status-off_track {
+  background: var(--bad-bg);
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.status-select.status-completed {
+  background: var(--good-bg);
+  border-color: var(--good);
+  color: var(--good);
 }
 
 .rock-title {
@@ -647,10 +669,6 @@ tbody tr:last-child td {
   background: var(--accent);
   border-radius: 999px;
   transition: width 0.25s ease;
-}
-
-.milestones input[type='checkbox'] {
-  accent-color: var(--accent);
 }
 
 /* Issues */

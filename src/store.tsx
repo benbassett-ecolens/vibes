@@ -17,6 +17,7 @@ import type {
   Milestone,
   Person,
   Rock,
+  RockStatus,
 } from './types'
 import { lastNPeriods, toISODate } from './periods'
 import { startSync, type SyncEngine, type SyncStatus } from './dbSync'
@@ -113,12 +114,12 @@ export function seedData(): AppData {
       name: 'Launch customer sustainability dashboard v2',
       ownerId: ben.id,
       dueDate: toISODate(new Date(new Date().setDate(new Date().getDate() + 35))),
-      completed: false,
+      status: 'on_track',
       blocker: '',
       milestones: [
-        { id: uid(), name: 'Finalize dashboard spec', ownerId: ben.id, done: true, dueDate: '' },
-        { id: uid(), name: 'Beta with 3 pilot customers', ownerId: sam.id, done: false, dueDate: '' },
-        { id: uid(), name: 'GA launch + announcement', ownerId: ben.id, done: false, dueDate: '' },
+        { id: uid(), name: 'Finalize dashboard spec', ownerId: ben.id, status: 'completed', dueDate: '' },
+        { id: uid(), name: 'Beta with 3 pilot customers', ownerId: sam.id, status: 'on_track', dueDate: '' },
+        { id: uid(), name: 'GA launch + announcement', ownerId: ben.id, status: 'on_track', dueDate: '' },
       ],
     },
     {
@@ -126,11 +127,11 @@ export function seedData(): AppData {
       name: 'Document core sales process',
       ownerId: sam.id,
       dueDate: toISODate(new Date(new Date().setDate(new Date().getDate() + 50))),
-      completed: false,
+      status: 'off_track',
       blocker: 'Waiting on CRM export access',
       milestones: [
-        { id: uid(), name: 'Map current pipeline stages', ownerId: sam.id, done: true, dueDate: '' },
-        { id: uid(), name: 'Write playbook draft', ownerId: riley.id, done: false, dueDate: '' },
+        { id: uid(), name: 'Map current pipeline stages', ownerId: sam.id, status: 'completed', dueDate: '' },
+        { id: uid(), name: 'Write playbook draft', ownerId: riley.id, status: 'on_track', dueDate: '' },
       ],
     },
   ]
@@ -204,6 +205,24 @@ export function normalizeData(raw: AppData): AppData {
   const data: AppData = { ...emptyData(), ...raw }
   data.ratings = Array.isArray(data.ratings) ? data.ratings : []
   data.issues = (raw.issues ?? []).map((i) => ({ ...i, details: i.details ?? '' }))
+  data.rocks = (raw.rocks ?? []).map((r) => {
+    const legacy = r as Rock & { completed?: boolean }
+    const status: RockStatus = legacy.status ?? (legacy.completed ? 'completed' : 'on_track')
+    const milestones = (r.milestones ?? []).map((m) => {
+      const legacyM = m as Milestone & { done?: boolean }
+      const mStatus: RockStatus = legacyM.status ?? (legacyM.done ? 'completed' : 'on_track')
+      return { id: m.id, name: m.name, ownerId: m.ownerId, dueDate: m.dueDate, status: mStatus }
+    })
+    return {
+      id: r.id,
+      name: r.name,
+      ownerId: r.ownerId,
+      dueDate: r.dueDate,
+      blocker: r.blocker ?? '',
+      status,
+      milestones,
+    }
+  })
   data.meetings = (raw.meetings ?? []).map((m) => {
     const legacy = m as Meeting & { ratings?: Array<{ personId: string; score: number }> }
     if (Array.isArray(legacy.ratings)) {
@@ -314,7 +333,7 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
         name,
         ownerId,
         dueDate,
-        completed: false,
+        status: 'on_track',
         blocker: '',
         milestones: [],
       }
@@ -327,7 +346,7 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
       setData((d) => ({ ...d, rocks: d.rocks.filter((r) => r.id !== id) }))
     },
     addMilestone(rockId: string, name: string, ownerId: string) {
-      const milestone: Milestone = { id: uid(), name, ownerId, done: false, dueDate: '' }
+      const milestone: Milestone = { id: uid(), name, ownerId, status: 'on_track', dueDate: '' }
       setData((d) => ({
         ...d,
         rocks: d.rocks.map((r) =>

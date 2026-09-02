@@ -66,4 +66,61 @@ describe('normalizeData', () => {
     expect(data.ratings).toEqual([])
     expect(data.meetings[0].attendeeIds).toEqual(['p1'])
   })
+
+  it('migrates legacy rock/milestone completed booleans to status', () => {
+    const legacy = {
+      people: [],
+      headlines: [],
+      metrics: [],
+      issues: [],
+      meetings: [],
+      rocks: [
+        {
+          id: 'r1',
+          name: 'Ship v2',
+          ownerId: 'p1',
+          dueDate: '2026-09-30',
+          completed: true,
+          blocker: '',
+          milestones: [
+            { id: 'm1', name: 'Spec', ownerId: 'p1', done: true, dueDate: '' },
+            { id: 'm2', name: 'Beta', ownerId: 'p1', done: false, dueDate: '' },
+          ],
+        },
+      ],
+    } as unknown as AppData
+
+    const data = normalizeData(legacy)
+    expect(data.rocks[0].status).toBe('completed')
+    expect((data.rocks[0] as { completed?: unknown }).completed).toBeUndefined()
+    expect(data.rocks[0].milestones[0].status).toBe('completed')
+    expect(data.rocks[0].milestones[1].status).toBe('on_track')
+    expect((data.rocks[0].milestones[0] as { done?: unknown }).done).toBeUndefined()
+  })
+
+  it('passes through current-shape rocks with an existing status', () => {
+    const current = {
+      people: [],
+      headlines: [],
+      metrics: [],
+      issues: [],
+      meetings: [],
+      rocks: [
+        {
+          id: 'r1',
+          name: 'Ship v2',
+          ownerId: 'p1',
+          dueDate: '2026-09-30',
+          status: 'off_track',
+          blocker: 'waiting on legal',
+          milestones: [{ id: 'm1', name: 'Spec', ownerId: 'p1', status: 'off_track', dueDate: '' }],
+        },
+      ],
+    } as unknown as AppData
+
+    const data = normalizeData(current)
+    expect(data.rocks[0].status).toBe('off_track')
+    expect(data.rocks[0].blocker).toBe('waiting on legal')
+    expect(data.rocks[0].milestones[0].status).toBe('off_track')
+  })
 })
