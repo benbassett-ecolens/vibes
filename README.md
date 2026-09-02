@@ -14,8 +14,14 @@ Meeting hub for Ecolens — the same meeting toolkit ninety.io productizes, self
 | **Rate the Meeting** | The standard 90-minute L10 agenda, attendee selection, individual 1–10 ratings with a live average (EOS aims for 8+), and meeting notes. |
 | **Team** | The people who appear as owners and attendees everywhere else. |
 
-Data is stored in the browser (`localStorage`) with JSON **Export / Import** for backup and
-hand-off. See "Shared team data" below for the multi-user upgrade path.
+**Two storage modes**, shown by the badge in the header:
+
+- **Shared · live** — when the app runs as a published claude.ai artifact, all data syncs
+  through the artifact's shared realtime store: everyone the page is shared with sees the same
+  scorecard, rocks, issues, and ratings, live. Meeting ratings are per-person records, so
+  several attendees can rate at once from their own devices.
+- **This browser only** — anywhere else (local dev, self-hosted), data lives in
+  `localStorage` with JSON **Export / Import** for backup and hand-off.
 
 ## Develop
 
@@ -29,12 +35,18 @@ npm run build:single  # self-contained single-file build → dist-single/index.h
 
 ## Publishing & hosting for Ecolens internal use
 
-The app builds to a static bundle (`dist/`), so hosting is cheap and simple. The real requirement
-is **access control** — "viewable by select teams inside the ecolens domain" — and the cleanest way
-to get that for a static app is to put an SSO gate *in front* of the host rather than build auth
-into the app.
+### Already live: the Claude artifact (zero infrastructure)
 
-### Recommended: Cloudflare Pages + Cloudflare Access
+The app is published as a claude.ai artifact with a shared team workspace. Because the page
+declares the shared-database capability it is organization-internal by design — it **cannot be
+shared publicly**, and every viewer must be a signed-in member of the owner's Claude
+organization. Access control is the artifact's Share menu: share it with exactly the teammates
+who should see it. No hosting account, no deploys — republishing the artifact ships updates.
+
+This is the right choice while the audience is "select teams who all use Claude at Ecolens". The
+options below are for when you want it on your own domain or for teammates without Claude access.
+
+### Self-hosted: Cloudflare Pages + Cloudflare Access
 
 Best fit for the requirement, free at Ecolens's likely scale (Access is free up to 50 users):
 
@@ -58,11 +70,11 @@ Best fit for the requirement, free at Ecolens's likely scale (Access is free up 
 - **GitHub Pages** — free, but access control is limited to GitHub org membership (private Pages
   requires GitHub Enterprise), so it doesn't map well to "select teams in the ecolens domain".
 
-### Shared team data (recommended next step)
+### Shared team data when self-hosting
 
-Today each browser keeps its own data (Export/Import moves it around — workable for a single
-meeting facilitator who "drives" the L10). For true shared state across the team, add
-[Supabase](https://supabase.com) (free tier):
+The artifact deployment already has shared team data. A self-hosted deployment starts in
+browser-only mode; to give it shared state too, add [Supabase](https://supabase.com) (free
+tier):
 
 1. Enable **Google sign-in** in Supabase Auth and restrict it to the `ecolens.io` hosted domain.
 2. Create tables mirroring `src/types.ts` (people, metrics + entries, rocks, milestones, issues,
