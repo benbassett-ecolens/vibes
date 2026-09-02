@@ -17,6 +17,7 @@ export function Issues() {
       name: name.trim(),
       term,
       raisedById: raisedById || data.people[0]?.id || '',
+      details: '',
       decision: '',
       implementerId: '',
     })
@@ -96,6 +97,7 @@ export function Issues() {
                 <th>Issue</th>
                 <th>Term</th>
                 <th>Raised by</th>
+                <th>Details</th>
                 <th>Decision</th>
                 <th>Implemented by</th>
                 <th></th>
@@ -134,6 +136,15 @@ export function Issues() {
                     <PersonSelect
                       value={issue.raisedById}
                       onChange={(raisedById) => actions.updateIssue(issue.id, { raisedById })}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      className="ghost"
+                      value={issue.details}
+                      placeholder="Context / details"
+                      title={issue.details}
+                      onChange={(e) => actions.updateIssue(issue.id, { details: e.target.value })}
                     />
                   </td>
                   <td>

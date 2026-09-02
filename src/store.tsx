@@ -141,6 +141,7 @@ export function seedData(): AppData {
       name: 'Onboarding takes too long for new customers',
       term: 'short',
       raisedById: riley.id,
+      details: '',
       decision: '',
       implementerId: '',
       solved: false,
@@ -151,6 +152,7 @@ export function seedData(): AppData {
       name: 'Do we expand into the EU market next year?',
       term: 'long',
       raisedById: ben.id,
+      details: '',
       decision: '',
       implementerId: '',
       solved: false,
@@ -201,6 +203,7 @@ function isAppData(value: unknown): value is AppData {
 export function normalizeData(raw: AppData): AppData {
   const data: AppData = { ...emptyData(), ...raw }
   data.ratings = Array.isArray(data.ratings) ? data.ratings : []
+  data.issues = (raw.issues ?? []).map((i) => ({ ...i, details: i.details ?? '' }))
   data.meetings = (raw.meetings ?? []).map((m) => {
     const legacy = m as Meeting & { ratings?: Array<{ personId: string; score: number }> }
     if (Array.isArray(legacy.ratings)) {

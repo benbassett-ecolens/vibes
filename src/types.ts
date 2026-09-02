@@ -55,6 +55,8 @@ export interface Issue {
   name: string
   term: IssueTerm
   raisedById: string
+  /** Context for the discussion — the "Issue Details" column of the L10 sheet. */
+  details: string
   decision: string
   implementerId: string
   solved: boolean
