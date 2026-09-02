@@ -58,6 +58,7 @@ class Fundamentals:
     market_cap: float
     shares_out: float
     avg_dollar_volume: float
+    exchange: str = "unknown"
 
     @property
     def pays_dividend(self) -> bool:

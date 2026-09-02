@@ -25,6 +25,7 @@ def fake(monkeypatch):
 def quote(symbol, **overrides):
     base = {
         "symbol": symbol, "shortName": f"{symbol} Corp", "sector": "Energy",
+        "exchange": "NYQ",
         "regularMarketPrice": 12.0, "trailingPE": 33.0, "dividendYield": 3.5,
         "marketCap": 5e9, "averageDailyVolume3Month": 4_000_000,
         "sharesOutstanding": 4.1e8,
@@ -85,6 +86,22 @@ def test_no_dividend_clause_when_none_is_required(fake):
     assert module.screen_calls[0]["query"].clause("dividendyield") is None
 
 
+def test_an_empty_screen_result_is_reported_not_papered_over(fake):
+    """Nothing matching is an answer. Substituting a watchlist would hide it."""
+    fake(quotes=[])
+    provider = YahooProvider()
+    assert list(provider.universe()) == []
+    assert provider.universe_source == "screener"
+    assert "matched no names" in provider.describe()
+
+
+def test_everything_filtered_out_as_otc_is_still_a_screener_result(fake):
+    fake(quotes=[quote("RYCEY", exchange="PNK")])
+    provider = YahooProvider()
+    assert list(provider.universe()) == []
+    assert provider.universe_source == "screener"
+
+
 def test_a_broken_screener_falls_back_to_the_static_watchlist(fake):
     fake(screen_error=RuntimeError("Yahoo is down"))
     provider = YahooProvider()
@@ -121,16 +138,81 @@ def test_fundamentals_merge_screener_quote_and_info(fake):
 
 
 @pytest.mark.parametrize("raw,expected", [
-    (3.5, 0.035),      # Yahoo percent form
-    (0.035, 0.035),    # Yahoo decimal form
+    (3.09, 0.0309),    # Inditex, as Yahoo actually returned it
+    (6.02, 0.0602),    # Pfizer
+    (0.93, 0.0093),    # Alibaba -- under 1%, the case the old heuristic broke
+    (0.75, 0.0075),    # Rolls-Royce
     (0, 0.0),
     (None, 0.0),
 ])
-def test_dividend_yield_is_normalised_to_a_decimal(fake, raw, expected):
+def test_dividend_yield_is_read_as_a_percentage(fake, raw, expected):
+    """Yahoo returns percent, including for yields below 1%."""
     fake(quotes=[quote("AAA", dividendYield=raw)])
     provider = YahooProvider()
     provider.universe()
     assert provider.fundamentals("AAA").dividend_yield == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("raw", [0.93, 0.75, 0.47, 0.18])
+def test_regression_sub_one_percent_yields_are_not_inflated_100x(fake, raw):
+    """A live run reported Alibaba's 0.93% yield as 93% and sized it accordingly.
+
+    The old rule divided by 100 only when the value exceeded 1.0, so every
+    sub-1% payer was mistaken for a spectacular one.
+    """
+    fake(quotes=[quote("AAA", dividendYield=raw)])
+    provider = YahooProvider()
+    provider.universe()
+    assert provider.fundamentals("AAA").dividend_yield < 0.02
+
+
+def test_an_impossible_yield_is_discarded_rather_than_acted_on(fake):
+    fake(quotes=[quote("AAA", dividendYield=95.0)])
+    provider = YahooProvider()
+    provider.universe()
+    assert provider.fundamentals("AAA").dividend_yield == 0.0
+
+
+# ---------------------------------------------------------- OTC exclusion
+
+def test_pink_sheet_adrs_are_excluded_by_default(fake):
+    fake(quotes=[quote("RYCEY", exchange="PNK"), quote("PFE", exchange="NYQ"),
+                 quote("FJIKY", exchange="PNK"), quote("KVUE", exchange="NYQ")])
+    provider = YahooProvider()
+    assert list(provider.universe()) == ["PFE", "KVUE"]
+    assert provider.otc_dropped == 2
+    assert "over-the-counter listing(s) excluded" in provider.describe()
+
+
+def test_otc_can_be_allowed_back_in(fake):
+    fake(quotes=[quote("RYCEY", exchange="PNK"), quote("PFE", exchange="NYQ")])
+    provider = YahooProvider(screen=ScreenConfig(exclude_otc=False))
+    assert list(provider.universe()) == ["RYCEY", "PFE"]
+    assert provider.otc_dropped == 0
+
+
+@pytest.mark.parametrize("code", ["NYQ", "NMS", "NGM", "NCM", "ASE"])
+def test_the_real_us_exchanges_survive(fake, code):
+    fake(quotes=[quote("AAA", exchange=code)])
+    assert list(YahooProvider().universe()) == ["AAA"]
+
+
+@pytest.mark.parametrize("code", ["PNK", "OQB", "OQX", "OTC", "PINX"])
+def test_over_the_counter_venues_are_dropped(fake, code):
+    fake(quotes=[quote("AAA", exchange=code)])
+    assert list(YahooProvider().universe()) == []
+
+
+def test_a_quote_with_no_exchange_is_kept_for_the_liquidity_test_to_judge(fake):
+    fake(quotes=[quote("AAA", exchange="")])
+    assert list(YahooProvider().universe()) == ["AAA"]
+
+
+def test_the_exchange_is_carried_onto_fundamentals(fake):
+    fake(quotes=[quote("AAA", exchange="NYQ")], info={"AAA": {}})
+    provider = YahooProvider()
+    provider.universe()
+    assert provider.fundamentals("AAA").exchange == "NYQ"
 
 
 def test_missing_price_yields_no_fundamentals(fake):

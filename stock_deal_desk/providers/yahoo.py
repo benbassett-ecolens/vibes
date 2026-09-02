@@ -42,6 +42,9 @@ DEFAULT_UNIVERSE = [
 #: How much looser the server-side net is than the desk's own screen.
 SCREEN_SLACK = 0.85
 
+#: Above this, a reported yield is bad data rather than a generous payer.
+MAX_CREDIBLE_YIELD = 0.40
+
 
 class YahooProvider:
     name = "yahoo"
@@ -61,6 +64,7 @@ class YahooProvider:
         self._screen = screen or ScreenConfig()
         self._max_candidates = max_candidates
         self._universe: list[str] | None = None
+        self.otc_dropped = 0
         self._quotes: dict[str, dict] = {}
         self._info: dict[str, dict] = {}
         self._bars: dict[str, list[Bar]] | None = None
@@ -76,11 +80,16 @@ class YahooProvider:
 
     def describe(self) -> str:
         source = {
-            "screener": "universe discovered via Yahoo's screener",
+            "screener": ("universe discovered via Yahoo's screener"
+                         if self._universe else
+                         "Yahoo's screener matched no names today"),
             "explicit": "universe supplied with --universe",
             "fallback": "screener unavailable, using the static watchlist",
         }.get(self.universe_source, "universe unresolved")
-        return f"live from Yahoo Finance ({source})"
+        note = f"live from Yahoo Finance ({source})"
+        if self.otc_dropped:
+            note += f"; {self.otc_dropped} over-the-counter listing(s) excluded"
+        return note
 
     # ------------------------------------------------------------- universe
 
@@ -92,10 +101,8 @@ class YahooProvider:
             self._universe = list(self._explicit)
             return self._universe
         discovered = self._run_screener()
-        if discovered:
-            self.universe_source = "screener"
-            self._universe = discovered
-        else:
+        if discovered is None:
+            # The call itself failed. Only then is a substitute list defensible.
             self.universe_source = "fallback"
             self._universe = list(DEFAULT_UNIVERSE)
             logger.warning(
@@ -103,6 +110,13 @@ class YahooProvider:
                 "watchlist. Results reflect that list, not the whole market.",
                 len(self._universe),
             )
+        else:
+            # An empty result is an *answer*: nothing matched. Substituting a
+            # watchlist here would quietly present names the screen rejected.
+            self.universe_source = "screener"
+            self._universe = discovered
+            if not discovered:
+                logger.info("the screen matched no names today")
         return self._universe
 
     def _screener_query(self):
@@ -135,21 +149,45 @@ class YahooProvider:
         return yf.screen(Q("and", clauses), size=min(self._max_candidates, 250),
                          sortField="intradaymarketcap", sortAsc=False)
 
-    def _run_screener(self) -> list[str]:
+    def _run_screener(self) -> list[str] | None:
+        """Symbols matching the screen, or None if the call itself failed.
+
+        The distinction matters: an empty list means "nothing qualifies today",
+        which is a legitimate answer the desk should report as-is. None means
+        the data source is down, which is the only case where falling back to a
+        hardcoded watchlist is honest.
+        """
         try:
             response = self._screener_query()
         except Exception as exc:
             logger.warning("Yahoo screener call failed: %s", exc)
-            return []
+            return None
         quotes = (response or {}).get("quotes") or []
         symbols: list[str] = []
+        dropped = 0
         for quote in quotes:
             symbol = quote.get("symbol")
             if not symbol:
                 continue
+            if self._is_otc(quote):
+                dropped += 1
+                continue
             self._quotes[symbol] = quote
             symbols.append(symbol)
+        if dropped:
+            logger.info("dropped %d over-the-counter listing(s) from the universe", dropped)
+        self.otc_dropped = dropped
         return symbols[: self._max_candidates]
+
+    def _is_otc(self, quote: dict) -> bool:
+        """True for pink-sheet / OTC listings, which the desk avoids by default."""
+        if not self._screen.exclude_otc:
+            return False
+        exchange = (quote.get("exchange") or "").strip().upper()
+        if not exchange:
+            # No exchange reported: keep it, and let the liquidity test decide.
+            return False
+        return exchange not in self._screen.allowed_exchanges
 
     # --------------------------------------------------------- fundamentals
 
@@ -183,6 +221,7 @@ class YahooProvider:
             shares_out=float(_first(info.get("sharesOutstanding"),
                                     quote.get("sharesOutstanding")) or 0.0),
             avg_dollar_volume=float(share_volume) * float(price),
+            exchange=str(_first(info.get("exchange"), quote.get("exchange"), "unknown")),
         )
 
     def _get_info(self, ticker: str) -> dict:
@@ -292,11 +331,24 @@ def _as_float(value) -> float | None:
 
 
 def _normalise_yield(value) -> float:
-    """Yahoo reports dividend yield as 0.031 in some fields and 3.1 in others."""
+    """Yahoo reports dividend yield as a percentage number: 3.09 means 3.09%.
+
+    This used to divide only values above 1.0, on the theory that Yahoo mixed
+    percent and decimal forms. It does not, and that heuristic silently turned
+    every sub-1% yield into a spectacular one -- a live capture had Alibaba's
+    0.93% reported as 93% and Rolls-Royce's 0.75% as 75%, which then scored as
+    the most attractive income in the book. Treat the field as percent, always,
+    and discard anything that implies an impossible yield rather than letting
+    bad data drive a position.
+    """
     parsed = _as_float(value)
     if parsed is None or parsed <= 0:
         return 0.0
-    return parsed / 100.0 if parsed > 1.0 else parsed
+    fraction = parsed / 100.0
+    if fraction > MAX_CREDIBLE_YIELD:
+        logger.warning("implausible dividend yield %.2f%% discarded as bad data", parsed)
+        return 0.0
+    return fraction
 
 
 def _frame_to_bars(frame) -> list[Bar]:
