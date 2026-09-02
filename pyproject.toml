@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stock-deal-desk"
+version = "0.1.0"
+description = "A four-agent equity research desk. Educational, not investment advice."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []          # the core is stdlib only, on purpose
+
+[project.optional-dependencies]
+live = ["yfinance>=0.2.40"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+deal-desk = "stock_deal_desk.cli:main"
+
+[tool.setuptools]
+packages = ["stock_deal_desk", "stock_deal_desk.agents", "stock_deal_desk.providers"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tests"]
