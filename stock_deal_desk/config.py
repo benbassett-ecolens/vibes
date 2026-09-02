@@ -24,6 +24,17 @@ class ScreenConfig:
     min_avg_dollar_volume: float = 2_000_000.0   # tradeable without moving it
     min_market_cap: float = 300_000_000.0
 
+    # Yahoo's "region: us" means *listed* in the US, which sweeps in thousands of
+    # pink-sheet ADRs of foreign companies. Those quote off a foreign close, so
+    # their US intraday range is artificially tiny -- which collapses ATR, which
+    # collapses the stop distance, which makes the risk model size them as though
+    # they were placid. They are not: they gap, and the spread is wide. Excluded
+    # by default; set exclude_otc=False to let them back in.
+    exclude_otc: bool = True
+    allowed_exchanges: tuple[str, ...] = (
+        "NYQ", "NYS", "NMS", "NGM", "NCM", "ASE", "PCX", "BTS", "AMX",
+    )
+
 
 @dataclass(frozen=True)
 class RiskConfig:
