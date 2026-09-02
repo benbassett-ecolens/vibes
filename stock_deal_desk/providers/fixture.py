@@ -30,10 +30,20 @@ class FixtureProvider:
             self._raw = json.load(fh)
         self.synthetic = bool(self._raw.get("synthetic", True))
         self.as_of = self._raw.get("as_of", "unknown")
+        self.provenance = self._raw.get("provenance",
+                                        "synthetic" if self.synthetic else "captured-live")
+        self.source = self._raw.get("source", "fixture")
+        self.captured_at = self._raw.get("captured_at")
         self._benchmark = self._raw.get("benchmark", "SPY")
 
     def is_live(self) -> bool:
         return False
+
+    def describe(self) -> str:
+        if self.synthetic:
+            return f"synthetic snapshot, generated (as of {self.as_of})"
+        captured = self.captured_at or self.as_of
+        return f"real data captured from '{self.source}' at {captured}, replayed"
 
     def universe(self) -> Sequence[str]:
         return [t for t in self._raw["securities"] if t != self._benchmark]

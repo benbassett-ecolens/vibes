@@ -74,3 +74,36 @@ def test_a_missing_snapshot_exits_with_an_error(capsys):
 def test_an_unknown_provider_is_rejected_by_argparse():
     with pytest.raises(SystemExit):
         build_parser().parse_args(["--provider", "bloomberg"])
+
+
+def test_save_snapshot_writes_a_replayable_file(tmp_path, capsys):
+    path = tmp_path / "snap.json"
+    assert main(["--save-snapshot", str(path)]) == 0
+    assert "snapshot written to" in capsys.readouterr().err
+    assert path.exists()
+    # ...and it replays.
+    assert main(["--snapshot", str(path)]) == 0
+    assert "STOCK DEAL DESK" in capsys.readouterr().out
+
+
+def test_an_unwritable_snapshot_path_exits_with_an_error(tmp_path, capsys):
+    # A regular file standing where a parent directory would have to go. This
+    # fails as root too, unlike a merely nonexistent path.
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("")
+    assert main(["--save-snapshot", str(blocker / "snap.json")]) == 2
+    assert "could not write snapshot" in capsys.readouterr().err
+
+
+def test_json_output_carries_provenance(capsys):
+    main(["--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["synthetic"] is True
+    assert "provenance" in payload
+
+
+def test_live_only_flags_have_sensible_defaults():
+    args = build_parser().parse_args([])
+    assert args.max_candidates == 40
+    assert args.period == "2y"
+    assert args.save_snapshot is None

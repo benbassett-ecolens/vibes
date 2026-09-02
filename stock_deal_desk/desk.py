@@ -34,6 +34,8 @@ class DeskRun:
     screened_in: int
     provider_name: str
     provider_is_live: bool
+    provider_note: str
+    provider_synthetic: bool
     config: DeskConfig
     agent_log: list[str] = field(default_factory=list)
 
@@ -153,6 +155,9 @@ class DealDesk:
             screened_in=sum(1 for s in setups.values() if s.passed_screen),
             provider_name=self.provider.name,
             provider_is_live=self.provider.is_live(),
+            provider_note=_describe(self.provider),
+            provider_synthetic=bool(getattr(self.provider, "synthetic",
+                                            not self.provider.is_live())),
             config=self.config,
             agent_log=log,
         )
@@ -185,6 +190,14 @@ class DealDesk:
 
         liquidity = clamp(f.avg_dollar_volume / 50_000_000.0)
         return clamp(0.40 * income + 0.35 * payout_safety + 0.25 * liquidity)
+
+
+def _describe(provider) -> str:
+    """Providers may omit describe(); fall back to something honest."""
+    describe = getattr(provider, "describe", None)
+    if callable(describe):
+        return describe()
+    return f"provider '{provider.name}'"
 
 
 def _empty_sentiment(ticker: str):

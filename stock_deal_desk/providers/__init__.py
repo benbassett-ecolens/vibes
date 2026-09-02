@@ -22,6 +22,7 @@ class DataProvider(Protocol):
     def headlines(self, ticker: str) -> Sequence[Headline]: ...
     def benchmark_history(self) -> Sequence[Bar]: ...
     def is_live(self) -> bool: ...
+    def describe(self) -> str: ...
 
 
 def get_provider(kind: str, **kwargs):
@@ -36,4 +37,6 @@ def get_provider(kind: str, **kwargs):
     raise ValueError(f"unknown provider {kind!r}; expected 'fixture' or 'yahoo'")
 
 
-__all__ = ["DataProvider", "get_provider"]
+from .snapshot import capture, save  # noqa: E402
+
+__all__ = ["DataProvider", "get_provider", "capture", "save"]

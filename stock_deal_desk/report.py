@@ -20,12 +20,18 @@ def render(run: DeskRun, show_passes: bool = False, width: int = 78) -> str:
     out.append("STOCK DEAL DESK".center(width))
     out.append(rule)
 
-    if not run.provider_is_live:
-        out.append("")
-        out.append("!! SYNTHETIC DATA -- the '{}' provider reads a frozen snapshot.".format(run.provider_name))
+    out.append("")
+    if run.provider_synthetic:
+        out.append("!! SYNTHETIC DATA -- {}.".format(run.provider_note))
         out.append("!! These prices, P/E ratios and headlines are generated, not market")
         out.append("!! data, and describe no real company. For real quotes, run with")
         out.append("!! --provider yahoo on a machine that can reach Yahoo Finance.")
+    elif not run.provider_is_live:
+        out.append("!! REPLAY -- {}.".format(run.provider_note))
+        out.append("!! This is real market data, but frozen at capture time. Prices have")
+        out.append("!! moved since. Re-run live before acting on anything here.")
+    else:
+        out.append("   LIVE -- {}.".format(run.provider_note))
 
     # ---- market
     out.append("")
@@ -129,9 +135,14 @@ def _detail(r: Recommendation, width: int) -> list[str]:
 def render_markdown(run: DeskRun) -> str:
     """A markdown table version, for pasting into notes or a PR."""
     lines = ["# Stock deal desk", ""]
-    if not run.provider_is_live:
-        lines += [f"> **Synthetic data.** The `{run.provider_name}` provider reads a frozen "
-                  "snapshot; these numbers are generated and describe no real company.", ""]
+    if run.provider_synthetic:
+        lines += [f"> **Synthetic data.** {run.provider_note}; these numbers are generated "
+                  "and describe no real company.", ""]
+    elif not run.provider_is_live:
+        lines += [f"> **Replay.** {run.provider_note}. Real data, frozen at capture time — "
+                  "prices have moved since.", ""]
+    else:
+        lines += [f"> **Live.** {run.provider_note}.", ""]
     lines += [
         f"**Regime:** {run.market.regime.value.upper()} "
         f"(risk budget x{run.market.regime.budget_multiplier:.2f}) | "

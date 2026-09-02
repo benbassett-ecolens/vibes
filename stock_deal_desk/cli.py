@@ -5,11 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import asdict, replace
+from dataclasses import asdict
 
 from .config import DeskConfig, RiskConfig, ScreenConfig
 from .desk import DealDesk
-from .providers import get_provider
+from .providers import get_provider, save as save_snapshot
 from .report import render, render_markdown
 
 
@@ -22,7 +22,11 @@ def build_parser() -> argparse.ArgumentParser:
                    help="fixture = bundled synthetic snapshot (default); "
                         "yahoo = live quotes, needs yfinance and network access")
     p.add_argument("--snapshot", help="path to an alternative fixture JSON")
-    p.add_argument("--universe", help="comma-separated tickers (yahoo provider only)")
+    p.add_argument("--universe", help="comma-separated tickers; overrides screener discovery")
+    p.add_argument("--max-candidates", type=int, default=40,
+                   help="cap on names pulled from the screener (yahoo provider)")
+    p.add_argument("--period", default="2y",
+                   help="history window to download, e.g. 1y, 2y, 5y")
 
     screen = p.add_argument_group("screen")
     screen.add_argument("--pe-min", type=float, default=25.0, help="high-P/E floor")
@@ -49,6 +53,9 @@ def build_parser() -> argparse.ArgumentParser:
                      help="also explain every rejected name")
     out.add_argument("--markdown", action="store_true", help="emit a markdown table")
     out.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    out.add_argument("--save-snapshot", metavar="PATH",
+                     help="also write everything fetched to a replayable JSON "
+                          "snapshot; replay it later with --snapshot PATH")
     return p
 
 
@@ -70,28 +77,46 @@ def build_config(args) -> DeskConfig:
     )
 
 
-def build_provider(args):
+def build_provider(args, config: DeskConfig):
     if args.provider == "fixture":
         return get_provider("fixture", path=args.snapshot) if args.snapshot \
             else get_provider("fixture")
     tickers = [t.strip().upper() for t in args.universe.split(",")] if args.universe else None
-    return get_provider("yahoo", tickers=tickers)
+    return get_provider(
+        "yahoo", tickers=tickers, screen=config.screen,
+        max_candidates=args.max_candidates, period=args.period,
+        benchmark=config.benchmark,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    config = build_config(args)
     try:
-        provider = build_provider(args)
+        provider = build_provider(args, config)
     except (RuntimeError, FileNotFoundError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    run = DealDesk(provider=provider, config=build_config(args)).run()
+    run = DealDesk(provider=provider, config=config).run()
+
+    if args.save_snapshot:
+        # Capture after the run so it reuses the data the agents already pulled
+        # rather than issuing a second round of requests.
+        try:
+            written = save_snapshot(provider, args.save_snapshot,
+                                    benchmark=config.benchmark)
+            print(f"snapshot written to {written}", file=sys.stderr)
+        except OSError as exc:
+            print(f"error: could not write snapshot: {exc}", file=sys.stderr)
+            return 2
 
     if args.json:
         print(json.dumps({
             "provider": run.provider_name,
             "is_live": run.provider_is_live,
+            "synthetic": run.provider_synthetic,
+            "provenance": run.provider_note,
             "regime": run.market.regime.value,
             "universe_size": run.universe_size,
             "screened_in": run.screened_in,
