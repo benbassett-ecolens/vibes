@@ -455,7 +455,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     startedRef.current = true
     startSync({
       getData: () => dataRef.current,
-      applyRemote: (patch) => setData((d) => ({ ...d, ...patch })),
+      // Normalize remote snapshots too — the shared db can hold older
+      // shapes (e.g. rocks/milestones from before the status field)
+      // written by a client that hasn't loaded this version yet.
+      applyRemote: (patch) => setData((d) => normalizeData({ ...d, ...patch })),
       setStatus: setSyncStatus,
     }).then((engine) => {
       engineRef.current = engine
