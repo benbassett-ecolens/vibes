@@ -1,5 +1,14 @@
+# Ecolens L10 (Node)
 node_modules/
 dist/
 dist-single/
 *.local
 .DS_Store
+
+# Stock deal desk (Python)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
