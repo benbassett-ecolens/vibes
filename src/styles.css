@@ -117,9 +117,33 @@ h3 {
   font-size: 12.5px;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .data-controls {
   display: flex;
   gap: 6px;
+}
+
+.sync-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.sync-badge.live {
+  background: var(--good-bg);
+  border-color: var(--good);
+  color: var(--good);
 }
 
 /* Tabs */

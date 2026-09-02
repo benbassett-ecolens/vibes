@@ -1,15 +1,25 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import type {
   AppData,
   Headline,
   Issue,
   Meeting,
+  MeetingRating,
   Metric,
   Milestone,
   Person,
   Rock,
 } from './types'
 import { lastNPeriods, toISODate } from './periods'
+import { startSync, type SyncEngine, type SyncStatus } from './dbSync'
 
 const STORAGE_KEY = 'ecolens-l10-data-v1'
 
@@ -21,7 +31,15 @@ export const uid = (): string =>
 export const today = (): string => toISODate(new Date())
 
 export function emptyData(): AppData {
-  return { people: [], headlines: [], metrics: [], rocks: [], issues: [], meetings: [] }
+  return {
+    people: [],
+    headlines: [],
+    metrics: [],
+    rocks: [],
+    issues: [],
+    meetings: [],
+    ratings: [],
+  }
 }
 
 /** Sample data so the app demonstrates itself on first run. Replace via Team/Data controls. */
@@ -157,7 +175,15 @@ export function seedData(): AppData {
     },
   ]
 
-  return { people: [ben, sam, riley], headlines, metrics, rocks, issues, meetings: [] }
+  return {
+    people: [ben, sam, riley],
+    headlines,
+    metrics,
+    rocks,
+    issues,
+    meetings: [],
+    ratings: [],
+  }
 }
 
 function isAppData(value: unknown): value is AppData {
@@ -168,16 +194,51 @@ function isAppData(value: unknown): value is AppData {
   )
 }
 
+/**
+ * Accept data from older exports/storage where ratings lived inside each
+ * meeting, and guarantee the `ratings` collection exists.
+ */
+export function normalizeData(raw: AppData): AppData {
+  const data: AppData = { ...emptyData(), ...raw }
+  data.ratings = Array.isArray(data.ratings) ? data.ratings : []
+  data.meetings = (raw.meetings ?? []).map((m) => {
+    const legacy = m as Meeting & { ratings?: Array<{ personId: string; score: number }> }
+    if (Array.isArray(legacy.ratings)) {
+      for (const r of legacy.ratings) {
+        if (r.score >= 1) {
+          data.ratings.push({
+            id: `${m.id}~${r.personId}`,
+            meetingId: m.id,
+            personId: r.personId,
+            score: r.score,
+          })
+        }
+      }
+      return {
+        id: m.id,
+        date: m.date,
+        notes: m.notes ?? '',
+        attendeeIds: legacy.ratings.map((r) => r.personId),
+      }
+    }
+    return { ...m, attendeeIds: m.attendeeIds ?? [], notes: m.notes ?? '' }
+  })
+  return data
+}
+
 function load(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (isAppData(parsed.data)) return parsed.data
+      if (isAppData(parsed.data)) return normalizeData(parsed.data)
     }
   } catch {
-    // storage unavailable or corrupt — fall through to seed
+    // storage unavailable or corrupt — fall through
   }
+  // Inside the artifact viewer the shared workspace is the source of
+  // truth, so a fresh browser starts empty instead of seeding samples.
+  if (typeof window !== 'undefined' && window.claude?.use) return emptyData()
   return seedData()
 }
 
@@ -185,6 +246,8 @@ interface AppContextValue {
   data: AppData
   setData: React.Dispatch<React.SetStateAction<AppData>>
   actions: ReturnType<typeof makeActions>
+  /** 'live' = shared workspace (artifact db), 'local' = this browser only. */
+  syncStatus: SyncStatus
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
@@ -304,53 +367,78 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
 
     // Meetings
     addMeeting(date: string, attendeeIds: string[]) {
-      const meeting: Meeting = {
-        id: uid(),
-        date,
-        ratings: attendeeIds.map((personId) => ({ personId, score: 0 })),
-        notes: '',
-      }
+      const meeting: Meeting = { id: uid(), date, attendeeIds, notes: '' }
       setData((d) => ({ ...d, meetings: [meeting, ...d.meetings] }))
     },
     updateMeeting(id: string, patch: Partial<Meeting>) {
       setData((d) => ({ ...d, meetings: patchList(d.meetings, id, patch) }))
     },
     setRating(meetingId: string, personId: string, score: number) {
-      setData((d) => ({
-        ...d,
-        meetings: d.meetings.map((m) =>
-          m.id === meetingId
-            ? {
-                ...m,
-                ratings: m.ratings.map((r) => (r.personId === personId ? { ...r, score } : r)),
-              }
-            : m,
-        ),
-      }))
+      const id = `${meetingId}~${personId}`
+      setData((d) => {
+        const rating: MeetingRating = { id, meetingId, personId, score }
+        const exists = d.ratings.some((r) => r.id === id)
+        return {
+          ...d,
+          ratings: exists ? patchList(d.ratings, id, rating) : [...d.ratings, rating],
+        }
+      })
     },
     toggleAttendee(meetingId: string, personId: string) {
-      setData((d) => ({
-        ...d,
-        meetings: d.meetings.map((m) => {
+      setData((d) => {
+        const meetings = d.meetings.map((m) => {
           if (m.id !== meetingId) return m
-          const has = m.ratings.some((r) => r.personId === personId)
+          const has = m.attendeeIds.includes(personId)
           return {
             ...m,
-            ratings: has
-              ? m.ratings.filter((r) => r.personId !== personId)
-              : [...m.ratings, { personId, score: 0 }],
+            attendeeIds: has
+              ? m.attendeeIds.filter((id) => id !== personId)
+              : [...m.attendeeIds, personId],
           }
-        }),
-      }))
+        })
+        const removed = d.meetings
+          .find((m) => m.id === meetingId)
+          ?.attendeeIds.includes(personId)
+        return {
+          ...d,
+          meetings,
+          ratings: removed
+            ? d.ratings.filter((r) => !(r.meetingId === meetingId && r.personId === personId))
+            : d.ratings,
+        }
+      })
     },
     removeMeeting(id: string) {
-      setData((d) => ({ ...d, meetings: d.meetings.filter((m) => m.id !== id) }))
+      setData((d) => ({
+        ...d,
+        meetings: d.meetings.filter((m) => m.id !== id),
+        ratings: d.ratings.filter((r) => r.meetingId !== id),
+      }))
     },
   }
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(load)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(() =>
+    typeof window !== 'undefined' && window.claude?.use ? 'connecting' : 'local',
+  )
+  const dataRef = useRef(data)
+  dataRef.current = data
+  const engineRef = useRef<SyncEngine | null>(null)
+  const startedRef = useRef(false)
+
+  useEffect(() => {
+    if (startedRef.current) return
+    startedRef.current = true
+    startSync({
+      getData: () => dataRef.current,
+      applyRemote: (patch) => setData((d) => ({ ...d, ...patch })),
+      setStatus: setSyncStatus,
+    }).then((engine) => {
+      engineRef.current = engine
+    })
+  }, [])
 
   useEffect(() => {
     try {
@@ -358,10 +446,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch {
       // storage unavailable (private mode, sandbox) — app still works in-memory
     }
+    engineRef.current?.onLocalChange(data)
   }, [data])
 
   const actions = useMemo(() => makeActions(setData), [])
-  const value = useMemo(() => ({ data, setData, actions }), [data, actions])
+  const value = useMemo(
+    () => ({ data, setData, actions, syncStatus }),
+    [data, actions, syncStatus],
+  )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

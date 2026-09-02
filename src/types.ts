@@ -61,16 +61,23 @@ export interface Issue {
   createdAt: string
 }
 
-export interface Rating {
-  personId: string
-  score: number // 1-10
-}
-
 export interface Meeting {
   id: string
   date: string
-  ratings: Rating[]
+  attendeeIds: string[]
   notes: string
+}
+
+/**
+ * One attendee's 1–10 rating of one meeting. Stored as its own record
+ * (id = `${meetingId}~${personId}`) so several people rating at once
+ * from different devices never overwrite each other.
+ */
+export interface MeetingRating {
+  id: string
+  meetingId: string
+  personId: string
+  score: number // 1-10, 0 = not yet rated
 }
 
 export interface AppData {
@@ -80,4 +87,5 @@ export interface AppData {
   rocks: Rock[]
   issues: Issue[]
   meetings: Meeting[]
+  ratings: MeetingRating[]
 }

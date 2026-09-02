@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Meeting } from '../types'
+import type { Meeting, MeetingRating } from '../types'
 import { today, useApp } from '../store'
 import { EmptyState, usePersonName } from './common'
 
@@ -13,8 +13,20 @@ const AGENDA: Array<[string, string]> = [
   ['Conclude', '5 min — recap, cascade, rate 1–10'],
 ]
 
-function meetingAverage(m: Meeting): number | null {
-  const scores = m.ratings.map((r) => r.score).filter((s) => s >= 1)
+function ratingFor(
+  ratings: MeetingRating[],
+  meetingId: string,
+  personId: string,
+): number {
+  return (
+    ratings.find((r) => r.meetingId === meetingId && r.personId === personId)?.score ?? 0
+  )
+}
+
+function meetingAverage(meeting: Meeting, ratings: MeetingRating[]): number | null {
+  const scores = meeting.attendeeIds
+    .map((personId) => ratingFor(ratings, meeting.id, personId))
+    .filter((s) => s >= 1)
   if (scores.length === 0) return null
   return Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
 }
@@ -22,7 +34,7 @@ function meetingAverage(m: Meeting): number | null {
 function MeetingCard({ meeting }: { meeting: Meeting }) {
   const { data, actions } = useApp()
   const personName = usePersonName()
-  const avg = meetingAverage(meeting)
+  const avg = meetingAverage(meeting, data.ratings)
 
   return (
     <article className="meeting-card">
@@ -47,13 +59,13 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
       </header>
 
       <details className="attendee-picker">
-        <summary>Attendees ({meeting.ratings.length})</summary>
+        <summary>Attendees ({meeting.attendeeIds.length})</summary>
         <div className="attendee-checks">
           {data.people.map((p) => (
             <label key={p.id}>
               <input
                 type="checkbox"
-                checked={meeting.ratings.some((r) => r.personId === p.id)}
+                checked={meeting.attendeeIds.includes(p.id)}
                 onChange={() => actions.toggleAttendee(meeting.id, p.id)}
               />
               {p.name}
@@ -62,35 +74,40 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
         </div>
       </details>
 
-      {meeting.ratings.length === 0 ? (
+      {meeting.attendeeIds.length === 0 ? (
         <EmptyState>No attendees selected yet.</EmptyState>
       ) : (
         <ul className="rating-list">
-          {meeting.ratings.map((r) => (
-            <li key={r.personId}>
-              <span className="grow">{personName(r.personId)}</span>
-              <input
-                type="range"
-                min={1}
-                max={10}
-                step={1}
-                value={r.score || 1}
-                onChange={(e) => actions.setRating(meeting.id, r.personId, Number(e.target.value))}
-              />
-              <span className={`score ${r.score >= 1 ? '' : 'unset'}`}>
-                {r.score >= 1 ? r.score : '—'}
-              </span>
-              {r.score < 1 && (
-                <button
-                  className="mini"
-                  onClick={() => actions.setRating(meeting.id, r.personId, 8)}
-                  title="Start rating (EOS aims for 8+)"
-                >
-                  rate
-                </button>
-              )}
-            </li>
-          ))}
+          {meeting.attendeeIds.map((personId) => {
+            const score = ratingFor(data.ratings, meeting.id, personId)
+            return (
+              <li key={personId}>
+                <span className="grow">{personName(personId)}</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={score || 1}
+                  onChange={(e) =>
+                    actions.setRating(meeting.id, personId, Number(e.target.value))
+                  }
+                />
+                <span className={`score ${score >= 1 ? '' : 'unset'}`}>
+                  {score >= 1 ? score : '—'}
+                </span>
+                {score < 1 && (
+                  <button
+                    className="mini"
+                    onClick={() => actions.setRating(meeting.id, personId, 8)}
+                    title="Start rating (EOS aims for 8+)"
+                  >
+                    rate
+                  </button>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
 

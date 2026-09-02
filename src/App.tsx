@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { AppProvider, emptyData, isAppData, seedData, useApp } from './store'
+import { AppProvider, emptyData, isAppData, normalizeData, seedData, useApp } from './store'
 import { Scorecard } from './components/Scorecard'
 import { Headlines } from './components/Headlines'
 import { Rocks } from './components/Rocks'
@@ -18,18 +18,55 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id']
 
+function SyncBadge() {
+  const { syncStatus } = useApp()
+  if (syncStatus === 'live') {
+    return (
+      <span
+        className="sync-badge live"
+        title="Shared workspace: everyone this page is shared with sees the same data, updated live."
+      >
+        ● Shared · live
+      </span>
+    )
+  }
+  if (syncStatus === 'connecting') {
+    return <span className="sync-badge">◌ Connecting…</span>
+  }
+  return (
+    <span className="sync-badge" title="Data is stored in this browser only. Use Export/Import to move it.">
+      ○ This browser only
+    </span>
+  )
+}
+
 function DataControls() {
   const { data, setData } = useApp()
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const exportJson = () => {
-    const blob = new Blob([JSON.stringify({ version: 1, data }, null, 2)], {
-      type: 'application/json',
-    })
+  const exportJson = async () => {
+    const json = JSON.stringify({ version: 2, data }, null, 2)
+    const filename = `ecolens-l10-export-${new Date().toISOString().slice(0, 10)}.json`
+    // Inside the artifact viewer, downloads go through the viewer's
+    // save prompt; elsewhere, a plain browser download.
+    if (window.claude?.use) {
+      try {
+        const downloads = (await window.claude.use('downloads')) as {
+          save(req: { filename: string; data: string }): Promise<unknown>
+        } | null
+        if (downloads) {
+          await downloads.save({ filename, data: json })
+          return
+        }
+      } catch {
+        return // viewer declined or save unavailable — don't double-prompt
+      }
+    }
+    const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `ecolens-l10-export-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = filename
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -39,7 +76,7 @@ function DataControls() {
       try {
         const parsed = JSON.parse(text)
         const candidate = parsed.data ?? parsed
-        if (isAppData(candidate)) setData(candidate)
+        if (isAppData(candidate)) setData(normalizeData(candidate))
         else alert('That file does not look like an Ecolens L10 export.')
       } catch {
         alert('Could not parse that file as JSON.')
@@ -89,6 +126,7 @@ function DataControls() {
 
 function Shell() {
   const [tab, setTab] = useState<TabId>('scorecard')
+  const { syncStatus } = useApp()
 
   return (
     <div className="app">
@@ -100,7 +138,10 @@ function Shell() {
             <p className="tagline">EOS Level 10 Meeting hub — scorecard, rocks, headlines, issues</p>
           </div>
         </div>
-        <DataControls />
+        <div className="header-right">
+          <SyncBadge />
+          <DataControls />
+        </div>
       </header>
 
       <nav className="tabs" role="tablist" aria-label="Sections">
@@ -127,8 +168,10 @@ function Shell() {
       </main>
 
       <footer className="app-footer">
-        Built on the EOS® / <em>Traction</em> Level 10 Meeting model. Data is stored in this
-        browser — use Export/Import to move or back it up.
+        Built on the EOS® / <em>Traction</em> Level 10 Meeting model.{' '}
+        {syncStatus === 'live'
+          ? 'Shared workspace: everyone this page is shared with sees the same data.'
+          : 'Data is stored in this browser — use Export/Import to move or back it up.'}
       </footer>
     </div>
   )
