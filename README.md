@@ -27,6 +27,29 @@ The agents never call each other. Each publishes typed findings to a bus, and
 the risk manager reads the blackboard. Adding a fifth agent (insider buying,
 options flow, short interest) means writing one class and one topic.
 
+## Running it without touching a terminal
+
+You do not need to install anything or run any commands.
+
+1. Go to the **Actions** tab of this repository on GitHub.
+2. Click **Run deal desk** in the left sidebar.
+3. Click the grey **Run workflow** button on the right. A small form appears —
+   account size, maximum share price, minimum P/E, whether to require a
+   dividend. Change them or leave the defaults.
+4. Click the green **Run workflow** button.
+
+A minute or two later the run finishes and the report appears in three places:
+
+- in the run's own **Summary** page, formatted and readable;
+- committed into the `reports/` folder as `latest.md` and a dated copy;
+- as a downloadable file under **Artifacts** at the bottom of the run.
+
+It also runs itself automatically on weekdays after the US market closes.
+
+If a run comes back red, it is almost always Yahoo rate-limiting GitHub's
+servers rather than a code problem — the report will say so, and re-running it
+a few minutes later usually works.
+
 ## Quick start
 
 ```bash
@@ -34,7 +57,7 @@ python -m stock_deal_desk                    # run on the bundled snapshot
 python -m stock_deal_desk --show-passes      # explain every rejection too
 python -m stock_deal_desk --markdown         # a table to paste into notes
 python -m stock_deal_desk --json             # machine-readable
-python -m pytest tests/ -q                   # 137 tests
+python -m pytest tests/ -q                   # 149 tests
 ```
 
 By default this runs against `data/snapshot.json`, a **synthetic** fixture
@@ -221,7 +244,8 @@ stock_deal_desk/
   desk.py       orchestrator: concurrent wave 1, then the risk manager
   report.py     terminal, markdown and JSON renderers
 tools/          make_fixture.py — regenerates the synthetic snapshot
-tests/          137 tests, including the live path (against a fake yfinance)
+.github/        the one-button GitHub Actions workflow
+tests/          149 tests, including the live path (against a fake yfinance)
 ```
 
 The core has **no third-party dependencies**. `yfinance` is only needed for the

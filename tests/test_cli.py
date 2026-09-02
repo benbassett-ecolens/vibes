@@ -52,9 +52,12 @@ def test_json_output_is_parseable_and_complete(capsys):
     assert first["setup"]["reward_risk"] >= 0
 
 
-def test_markdown_output_is_a_table(capsys):
+def test_markdown_output_is_a_readable_report(capsys):
     assert main(["--markdown"]) == 0
-    assert "| Ticker | Name | Verdict |" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert out.startswith("# Deal desk")
+    assert "## What kind of day is it?" in out
+    assert "## What the desk would buy" in out
 
 
 def test_show_passes_explains_the_rejections(capsys):

@@ -125,12 +125,12 @@ def test_expected_growth_is_the_sum_of_position_contributions(run):
 def test_the_fixture_provider_is_flagged_as_not_live(run):
     assert run.provider_is_live is False
     assert "SYNTHETIC" in render(run)
-    assert "Synthetic data" in render_markdown(run)
+    assert "made-up companies" in render_markdown(run)
 
 
 def test_reports_render_without_error(run):
     assert "STOCK DEAL DESK" in render(run, show_passes=True)
-    assert "| Ticker |" in render_markdown(run)
+    assert "# Deal desk" in render_markdown(run)
 
 
 def test_an_unknown_provider_name_is_rejected():

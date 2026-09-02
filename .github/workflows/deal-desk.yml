@@ -1,0 +1,129 @@
+# Runs the deal desk on live market data and writes a readable report into the
+# repo. No terminal needed: open the Actions tab, pick "Run deal desk", press
+# the green button. The form fields below become the desk's settings.
+name: Run deal desk
+
+on:
+  workflow_dispatch:
+    inputs:
+      account_size:
+        description: "Account size in dollars (position sizes are scaled to this)"
+        required: false
+        default: "100000"
+      max_price:
+        description: "Highest share price to consider"
+        required: false
+        default: "25"
+      min_pe:
+        description: "Lowest P/E to consider (this screen wants HIGH P/E)"
+        required: false
+        default: "25"
+      require_dividend:
+        description: "Only consider companies that pay a dividend"
+        type: boolean
+        required: false
+        default: false
+      max_candidates:
+        description: "How many names to pull from the screener"
+        required: false
+        default: "40"
+  schedule:
+    # 22:00 UTC on weekdays -- after the US close in either daylight or standard time.
+    - cron: "0 22 * * 1-5"
+
+permissions:
+  contents: write
+
+jobs:
+  desk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: pip install -e ".[live]"
+
+      - name: Run the desk
+        id: desk
+        # Never fail the job here. If Yahoo blocks the runner we still want the
+        # log and a report saying so, rather than a red X with nothing to read.
+        continue-on-error: true
+        env:
+          ACCOUNT: ${{ github.event.inputs.account_size || '100000' }}
+          MAX_PRICE: ${{ github.event.inputs.max_price || '25' }}
+          MIN_PE: ${{ github.event.inputs.min_pe || '25' }}
+          MAX_CANDIDATES: ${{ github.event.inputs.max_candidates || '40' }}
+          REQUIRE_DIVIDEND: ${{ github.event.inputs.require_dividend }}
+        run: |
+          set -o pipefail
+          mkdir -p reports data
+          STAMP="$(date -u +%Y-%m-%d)"
+          echo "stamp=$STAMP" >> "$GITHUB_OUTPUT"
+
+          ARGS=(--provider yahoo
+                --equity "$ACCOUNT"
+                --price-max "$MAX_PRICE"
+                --pe-min "$MIN_PE"
+                --max-candidates "$MAX_CANDIDATES"
+                --save-snapshot data/live-snapshot.json
+                --markdown)
+          if [ "$REQUIRE_DIVIDEND" = "true" ]; then
+            ARGS+=(--require-dividend)
+          fi
+
+          echo "Running: deal-desk ${ARGS[*]}"
+          if deal-desk "${ARGS[@]}" > "reports/$STAMP.md" 2> reports/run.log; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "# Deal desk — run failed on $STAMP"
+              echo
+              echo "The desk could not fetch market data. The most likely cause is"
+              echo "Yahoo Finance rate-limiting or blocking GitHub's servers, which"
+              echo "happens intermittently and is not a problem with the code."
+              echo
+              echo "Try re-running this workflow in a few minutes. If it keeps"
+              echo "failing, the log below is what to share."
+              echo
+              echo '```'
+              tail -40 reports/run.log || true
+              echo '```'
+            } > "reports/$STAMP.md"
+          fi
+          cp "reports/$STAMP.md" reports/latest.md
+          cat reports/run.log || true
+
+      - name: Show the report in the run summary
+        run: cat reports/latest.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save the report as a download
+        uses: actions/upload-artifact@v4
+        with:
+          name: deal-desk-report
+          path: |
+            reports/
+            data/live-snapshot.json
+          if-no-files-found: warn
+
+      - name: Commit the report back to the repo
+        run: |
+          git config user.name "deal-desk-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reports data/live-snapshot.json
+          if git diff --staged --quiet; then
+            echo "Nothing changed."
+          else
+            git commit -m "Deal desk report ${{ steps.desk.outputs.stamp }}"
+            git push origin "HEAD:${{ github.ref_name }}"
+          fi
+
+      - name: Fail the run if the desk itself failed
+        if: steps.desk.outputs.ok == 'false'
+        run: |
+          echo "The desk could not fetch data -- see reports/latest.md" >&2
+          exit 1
