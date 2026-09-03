@@ -28,8 +28,14 @@ on:
         required: false
         default: "40"
   schedule:
-    # 22:00 UTC on weekdays -- after the US close in either daylight or standard time.
-    - cron: "0 22 * * 1-5"
+    # 9:00am Central on weekdays. GitHub Actions cron is fixed UTC and does not
+    # know about Daylight Saving, so this is two rules rather than one: one
+    # tuned for Central Daylight Time (UTC-5, roughly March-October) and one
+    # for Central Standard Time (UTC-6, roughly November-February). Each is
+    # only off by an hour, if at all, in the few days right around the clock
+    # change in March/November -- not worth a third rule to fix.
+    - cron: "0 14 * 3-10 1-5"   # 9am CDT, March through October
+    - cron: "0 15 * 11-2 1-5"   # 9am CST, November through February
 
 permissions:
   contents: write
