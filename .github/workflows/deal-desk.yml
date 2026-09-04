@@ -34,8 +34,15 @@ on:
     # for Central Standard Time (UTC-6, roughly November-February). Each is
     # only off by an hour, if at all, in the few days right around the clock
     # change in March/November -- not worth a third rule to fix.
-    - cron: "0 14 * 3-10 1-5"   # 9am CDT, March through October
-    - cron: "0 15 * 11-2 1-5"   # 9am CST, November through February
+    #
+    # The Nov-Feb rule spells out the months as a list (11,12,1,2) rather than
+    # a range (11-2): a previous version used "11-2" and GitHub Actions
+    # silently rejected the whole workflow file as invalid, because a cron
+    # range must count up (low-high), and a month range that wraps past
+    # December back to January isn't one. Every scheduled and manual run
+    # failed with zero jobs until this was caught.
+    - cron: "0 14 * 3-10 1-5"      # 9am CDT, March through October
+    - cron: "0 15 * 11,12,1,2 1-5" # 9am CST, November through February
 
 permissions:
   contents: write
