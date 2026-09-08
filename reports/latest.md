@@ -6,7 +6,7 @@
 
 The broad market is trending up and reasonably calm, so the desk is willing to use its **full** risk budget.
 
-- The market index is **+8.0%** versus its long-run average.
+- The market index is **+8.1%** versus its long-run average.
 - **71%** of the stocks it looked at are in their own uptrend.
 - Volatility is running at **13%** a year (calm).
 
@@ -19,13 +19,13 @@ The broad market is trending up and reasonably calm, so the desk is willing to u
 
 | Ticker | Name | Price | Rejected because |
 |---|---|---:|---|
-| MUFG | Mitsubishi UFJ Financial Group, | $23.70 | failed the screen: P/E 15.9 below the 25 'high P/E' floor; reward:risk 1.7 below the 1.8 minimum |
-| SMFG | Sumitomo Mitsui Financial Group | $26.93 | failed the screen: P/E 16.0 below the 25 'high P/E' floor; $26.93 above the $25 price ceiling; reward:risk 1.7 below the 1.8 minimum |
-| PFE | Pfizer, Inc. | $27.96 | failed the screen: $27.96 above the $25 price ceiling; reward:risk 1.7 below the 1.8 minimum; payout ratio 226% exceeds 120% -- the 6.0% yield is n... |
-| KVUE | Kenvue Inc. | $18.43 | failed the screen: P/E 21.7 below the 25 'high P/E' floor |
+| MUFG | Mitsubishi UFJ Financial Group, | $23.68 | failed the screen: P/E 15.9 below the 25 'high P/E' floor; reward:risk 1.7 below the 1.8 minimum |
+| SMFG | Sumitomo Mitsui Financial Group | $26.88 | failed the screen: P/E 16.0 below the 25 'high P/E' floor; $26.88 above the $25 price ceiling; reward:risk 1.7 below the 1.8 minimum |
+| PFE | Pfizer, Inc. | $27.91 | failed the screen: $27.91 above the $25 price ceiling; reward:risk 1.7 below the 1.8 minimum; payout ratio 226% exceeds 120% -- the 6.0% yield is n... |
+| KVUE | Kenvue Inc. | $18.48 | failed the screen: P/E 21.7 below the 25 'high P/E' floor |
 | VALE | VALE S.A. | $15.62 | reward:risk 1.1 below the 1.8 minimum; payout ratio 159% exceeds 120% -- the 7.8% yield is not covered by earnings and is a cut candidate |
-| NOK | Nokia Corporation Sponsored | $10.80 | reward:risk 1.5 below the 1.8 minimum |
-| RKT | Rocket Companies, Inc. | $13.98 | failed the screen: no trailing P/E (unprofitable or not reported) |
+| NOK | Nokia Corporation Sponsored | $10.84 | reward:risk 1.5 below the 1.8 minimum |
+| RKT | Rocket Companies, Inc. | $14.02 | failed the screen: no trailing P/E (unprofitable or not reported) |
 
 </details>
 
