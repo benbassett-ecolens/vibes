@@ -31,6 +31,7 @@ const COLLECTIONS = [
   'issues',
   'meetings',
   'ratings',
+  'segues',
 ] as const
 type CollectionName = (typeof COLLECTIONS)[number]
 

@@ -3,13 +3,24 @@ import type { IssueTerm } from '../types'
 import { useApp } from '../store'
 import { EmptyState, PersonSelect } from './common'
 
+const SOLVED_WINDOW_DAYS = 7
+
+function daysSince(dateStr: string): number | null {
+  if (!dateStr) return null
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const then = new Date(y, m - 1, d)
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  return Math.round((now.getTime() - then.getTime()) / 86_400_000)
+}
+
 export function Issues() {
   const { data, actions } = useApp()
   const [name, setName] = useState('')
   const [term, setTerm] = useState<IssueTerm>('short')
   const [raisedById, setRaisedById] = useState('')
   const [filter, setFilter] = useState<'all' | IssueTerm>('all')
-  const [showSolved, setShowSolved] = useState(false)
+  const [showAllSolved, setShowAllSolved] = useState(false)
 
   const submit = () => {
     if (!name.trim()) return
@@ -24,9 +35,13 @@ export function Issues() {
     setName('')
   }
 
-  const issues = data.issues.filter(
-    (i) => (filter === 'all' || i.term === filter) && (showSolved || !i.solved),
-  )
+  const issues = data.issues.filter((i) => {
+    if (filter !== 'all' && i.term !== filter) return false
+    if (!i.solved) return true
+    if (showAllSolved) return true
+    const days = daysSince(i.solvedAt)
+    return days != null && days <= SOLVED_WINDOW_DAYS
+  })
 
   return (
     <section>
@@ -37,7 +52,8 @@ export function Issues() {
             Work the list with IDS: <strong>Identify</strong> the real issue,{' '}
             <strong>Discuss</strong> it once, <strong>Solve</strong> it with a decision and one
             person to implement it. Short-term issues get solved in this week's L10; long-term
-            issues wait for the quarterly.
+            issues wait for the quarterly. Issues solved in the last {SOLVED_WINDOW_DAYS} days
+            stay visible so the team can see what got closed out.
           </p>
         </div>
         <div className="toggle" role="tablist" aria-label="Issue filter">
@@ -80,10 +96,10 @@ export function Issues() {
       <label className="show-solved">
         <input
           type="checkbox"
-          checked={showSolved}
-          onChange={(e) => setShowSolved(e.target.checked)}
+          checked={showAllSolved}
+          onChange={(e) => setShowAllSolved(e.target.checked)}
         />
-        Show solved issues
+        Show all solved issues (older than {SOLVED_WINDOW_DAYS} days)
       </label>
 
       {issues.length === 0 ? (
@@ -109,7 +125,7 @@ export function Issues() {
                   <td>
                     <input
                       type="checkbox"
-                      title="Mark solved"
+                      title={issue.solved ? `Solved ${issue.solvedAt}` : 'Mark solved'}
                       checked={issue.solved}
                       onChange={(e) => actions.updateIssue(issue.id, { solved: e.target.checked })}
                     />
@@ -139,17 +155,18 @@ export function Issues() {
                     />
                   </td>
                   <td>
-                    <input
-                      className="ghost"
+                    <textarea
+                      className="issue-textarea"
+                      rows={2}
                       value={issue.details}
                       placeholder="Context / details"
-                      title={issue.details}
                       onChange={(e) => actions.updateIssue(issue.id, { details: e.target.value })}
                     />
                   </td>
                   <td>
-                    <input
-                      className="ghost"
+                    <textarea
+                      className="issue-textarea"
+                      rows={2}
                       value={issue.decision}
                       placeholder="What did we decide?"
                       onChange={(e) => actions.updateIssue(issue.id, { decision: e.target.value })}

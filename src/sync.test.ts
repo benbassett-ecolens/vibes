@@ -123,4 +123,55 @@ describe('normalizeData', () => {
     expect(data.rocks[0].blocker).toBe('waiting on legal')
     expect(data.rocks[0].milestones[0].status).toBe('off_track')
   })
+
+  it('guarantees segues exists and backfills headline.done', () => {
+    const legacy = {
+      people: [],
+      headlines: [{ id: 'h1', text: 'Signed a customer', authorId: 'p1', date: '2026-09-01', kind: 'customer' }],
+      metrics: [],
+      rocks: [],
+      issues: [],
+      meetings: [],
+    } as unknown as AppData
+
+    const data = normalizeData(legacy)
+    expect(data.segues).toEqual([])
+    expect(data.headlines[0].done).toBe(false)
+  })
+
+  it('backfills solvedAt for an already-solved legacy issue', () => {
+    const legacy = {
+      people: [],
+      headlines: [],
+      metrics: [],
+      rocks: [],
+      meetings: [],
+      issues: [
+        {
+          id: 'i1',
+          name: 'Old issue',
+          term: 'short',
+          raisedById: 'p1',
+          decision: 'done',
+          implementerId: 'p1',
+          solved: true,
+          createdAt: '2026-01-01',
+        },
+        {
+          id: 'i2',
+          name: 'Open issue',
+          term: 'short',
+          raisedById: 'p1',
+          decision: '',
+          implementerId: '',
+          solved: false,
+          createdAt: '2026-01-01',
+        },
+      ],
+    } as unknown as AppData
+
+    const data = normalizeData(legacy)
+    expect(data.issues[0].solvedAt).not.toBe('')
+    expect(data.issues[1].solvedAt).toBe('')
+  })
 })

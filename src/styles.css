@@ -13,6 +13,8 @@
   --bad-bg: #fdeaea;
   --warn: #b45309;
   --warn-bg: #fdf1e0;
+  --info: #1d4ed8;
+  --info-bg: #e4ecfd;
   --shadow: 0 1px 3px rgba(20, 35, 25, 0.08);
 }
 
@@ -32,6 +34,8 @@
     --bad-bg: #3d1c1c;
     --warn: #fbbf24;
     --warn-bg: #3a2c14;
+    --info: #60a5fa;
+    --info-bg: #16233c;
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   }
 }
@@ -51,6 +55,8 @@
   --bad-bg: #3d1c1c;
   --warn: #fbbf24;
   --warn-bg: #3a2c14;
+  --info: #60a5fa;
+  --info-bg: #16233c;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
@@ -497,7 +503,8 @@ tbody tr:last-child td {
 .headline-list,
 .team-list,
 .milestones,
-.rating-list {
+.rating-list,
+.segue-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -509,7 +516,8 @@ tbody tr:last-child td {
 .headline,
 .team-list li,
 .milestones li,
-.rating-list li {
+.rating-list li,
+.segue-list li {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -517,6 +525,23 @@ tbody tr:last-child td {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 7px 10px;
+}
+
+.headline input[type='checkbox'] {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
+.headline-done {
+  opacity: 0.65;
+}
+
+.segue-name {
+  min-width: 90px;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .badge {
@@ -603,9 +628,9 @@ tbody tr:last-child td {
 }
 
 .status-select.status-on_track {
-  background: var(--panel-2);
-  border-color: var(--border);
-  color: var(--muted);
+  background: var(--info-bg);
+  border-color: var(--info);
+  color: var(--info);
 }
 
 .status-select.status-off_track {
@@ -689,6 +714,57 @@ tbody tr:last-child td {
 
 .row-solved td {
   opacity: 0.65;
+}
+
+.issues {
+  table-layout: fixed;
+  min-width: 1320px;
+}
+
+.issues th:nth-child(1),
+.issues td:nth-child(1) {
+  width: 56px;
+}
+
+.issues th:nth-child(2),
+.issues td:nth-child(2) {
+  width: 260px;
+}
+
+.issues th:nth-child(3),
+.issues td:nth-child(3) {
+  width: 90px;
+}
+
+.issues th:nth-child(4),
+.issues td:nth-child(4) {
+  width: 130px;
+}
+
+.issues th:nth-child(5),
+.issues td:nth-child(5),
+.issues th:nth-child(6),
+.issues td:nth-child(6) {
+  width: 280px;
+}
+
+.issues th:nth-child(7),
+.issues td:nth-child(7) {
+  width: 130px;
+}
+
+.issues th:nth-child(8),
+.issues td:nth-child(8) {
+  width: 40px;
+}
+
+.issue-textarea {
+  width: 100%;
+  min-height: 48px;
+  resize: vertical;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Meeting */

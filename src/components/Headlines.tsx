@@ -23,6 +23,7 @@ export function Headlines() {
       authorId: authorId || data.people[0]?.id || '',
       date: today(),
       kind,
+      done: false,
     })
     setText('')
   }
@@ -34,7 +35,7 @@ export function Headlines() {
           <h2>Headlines</h2>
           <p className="hint">
             Quick customer and employee news — good or bad, one line each, no discussion. Anything
-            that needs discussion drops to the Issues List.
+            that needs discussion drops to the Issues List. Check one off once it's been shared.
           </p>
         </div>
       </div>
@@ -67,10 +68,16 @@ export function Headlines() {
       ) : (
         <ul className="headline-list">
           {data.headlines.map((h) => (
-            <li key={h.id} className="headline">
+            <li key={h.id} className={`headline ${h.done ? 'headline-done' : ''}`}>
+              <input
+                type="checkbox"
+                checked={h.done}
+                title="Mark shared"
+                onChange={(e) => actions.updateHeadline(h.id, { done: e.target.checked })}
+              />
               <span className={`badge badge-${h.kind}`}>{KIND_LABEL[h.kind]}</span>
               <input
-                className="ghost grow"
+                className={`ghost grow ${h.done ? 'strike' : ''}`}
                 value={h.text}
                 onChange={(e) => actions.updateHeadline(h.id, { text: e.target.value })}
               />
