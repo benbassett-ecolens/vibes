@@ -1,6 +1,6 @@
 import type { Meeting, MeetingRating } from '../types'
 import { useApp } from '../store'
-import { EmptyState, usePersonName } from './common'
+import { ConfirmButton, EmptyState, usePersonName } from './common'
 
 function ratingFor(
   ratings: MeetingRating[],
@@ -36,15 +36,9 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
         <span className={`avg-pill ${avg == null ? '' : avg >= 8 ? 'good' : avg >= 6 ? 'warn' : 'bad'}`}>
           {avg == null ? 'Not rated' : `Avg ${avg} / 10`}
         </span>
-        <button
-          className="icon-btn danger"
-          title="Delete meeting"
-          onClick={() => {
-            if (confirm('Delete this meeting?')) actions.removeMeeting(meeting.id)
-          }}
-        >
+        <ConfirmButton title="Delete meeting" onConfirm={() => actions.removeMeeting(meeting.id)}>
           ✕
-        </button>
+        </ConfirmButton>
       </header>
 
       <details className="attendee-picker">

@@ -8,6 +8,7 @@ import { Rocks } from './components/Rocks'
 import { Issues } from './components/Issues'
 import { MeetingTab } from './components/Meeting'
 import { Team } from './components/Team'
+import { ConfirmButton } from './components/common'
 
 const TABS = [
   { id: 'start', label: 'Start a Meeting', icon: '🏁' },
@@ -47,6 +48,7 @@ function SyncBadge() {
 function DataControls() {
   const { data, setData } = useApp()
   const fileRef = useRef<HTMLInputElement>(null)
+  const [importError, setImportError] = useState<string | null>(null)
 
   const exportJson = async () => {
     const json = JSON.stringify({ version: 2, data }, null, 2)
@@ -76,54 +78,57 @@ function DataControls() {
   }
 
   const importJson = (file: File) => {
+    setImportError(null)
     file.text().then((text) => {
       try {
         const parsed = JSON.parse(text)
         const candidate = parsed.data ?? parsed
         if (isAppData(candidate)) setData(normalizeData(candidate))
-        else alert('That file does not look like an Ecolens L10 export.')
+        else setImportError('That file does not look like an Ecolens L10 export.')
       } catch {
-        alert('Could not parse that file as JSON.')
+        setImportError('Could not parse that file as JSON.')
       }
     })
   }
 
   return (
-    <div className="data-controls">
-      <button onClick={exportJson} title="Download all data as JSON">
-        Export
-      </button>
-      <button onClick={() => fileRef.current?.click()} title="Load data from a JSON export">
-        Import
-      </button>
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".json,application/json"
-        hidden
-        onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (f) importJson(f)
-          e.target.value = ''
-        }}
-      />
-      <button
-        onClick={() => {
-          if (confirm('Replace everything with the sample data?')) setData(seedData())
-        }}
-        title="Reset to sample data"
-      >
-        Sample
-      </button>
-      <button
-        className="danger-text"
-        onClick={() => {
-          if (confirm('Delete ALL data? Export first if you want a backup.')) setData(emptyData())
-        }}
-        title="Clear all data"
-      >
-        Clear
-      </button>
+    <div className="data-controls-wrap">
+      <div className="data-controls">
+        <button onClick={exportJson} title="Download all data as JSON">
+          Export
+        </button>
+        <button onClick={() => fileRef.current?.click()} title="Load data from a JSON export">
+          Import
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) importJson(f)
+            e.target.value = ''
+          }}
+        />
+        <ConfirmButton
+          className=""
+          confirmLabel="Replace?"
+          title="Reset to sample data"
+          onConfirm={() => setData(seedData())}
+        >
+          Sample
+        </ConfirmButton>
+        <ConfirmButton
+          className="danger-text"
+          confirmLabel="Delete all?"
+          title="Clear all data"
+          onConfirm={() => setData(emptyData())}
+        >
+          Clear
+        </ConfirmButton>
+      </div>
+      {importError && <p className="import-error">{importError}</p>}
     </div>
   )
 }

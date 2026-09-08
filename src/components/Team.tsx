@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '../store'
-import { EmptyState } from './common'
+import { ConfirmButton, EmptyState } from './common'
 
 export function Team() {
   const { data, actions } = useApp()
@@ -47,16 +47,12 @@ export function Team() {
                 value={p.name}
                 onChange={(e) => actions.renamePerson(p.id, e.target.value)}
               />
-              <button
-                className="icon-btn danger"
-                title="Remove teammate"
-                onClick={() => {
-                  if (confirm(`Remove ${p.name}? Items they own will show "—".`))
-                    actions.removePerson(p.id)
-                }}
+              <ConfirmButton
+                title={`Remove teammate — items they own will show "—"`}
+                onConfirm={() => actions.removePerson(p.id)}
               >
                 ✕
-              </button>
+              </ConfirmButton>
             </li>
           ))}
         </ul>

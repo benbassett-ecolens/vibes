@@ -130,9 +130,24 @@ h3 {
   flex-wrap: wrap;
 }
 
+.data-controls-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
 .data-controls {
   display: flex;
   gap: 6px;
+}
+
+.import-error {
+  margin: 0;
+  color: var(--bad);
+  font-size: 12px;
+  max-width: 260px;
+  text-align: right;
 }
 
 .sync-badge {
@@ -278,6 +293,16 @@ button.mini {
 
 .danger-text {
   color: var(--bad);
+}
+
+/* Armed state of ConfirmButton — a second click within a few seconds
+   actually confirms. Solid red so it reads as distinctly different from
+   the button's normal state, whatever base style it started from. */
+.confirm-armed {
+  background: var(--bad) !important;
+  border-color: var(--bad) !important;
+  color: #fff !important;
+  font-weight: 700;
 }
 
 input,

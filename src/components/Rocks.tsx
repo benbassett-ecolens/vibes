@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Rock } from '../types'
 import { useApp } from '../store'
-import { EmptyState, PersonSelect, StatusSelect } from './common'
+import { ConfirmButton, EmptyState, PersonSelect, StatusSelect } from './common'
 
 function daysUntil(dateStr: string): number | null {
   if (!dateStr) return null
@@ -41,15 +41,9 @@ function RockCard({ rock }: { rock: Rock }) {
           value={rock.name}
           onChange={(e) => actions.updateRock(rock.id, { name: e.target.value })}
         />
-        <button
-          className="icon-btn danger"
-          title="Delete Rock"
-          onClick={() => {
-            if (confirm(`Delete Rock "${rock.name}"?`)) actions.removeRock(rock.id)
-          }}
-        >
+        <ConfirmButton title="Delete Rock" onConfirm={() => actions.removeRock(rock.id)}>
           ✕
-        </button>
+        </ConfirmButton>
       </header>
 
       <div className="rock-meta">

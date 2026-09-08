@@ -9,7 +9,7 @@ import {
   shiftPeriod,
 } from '../periods'
 import { useApp } from '../store'
-import { EmptyState, NumberInput, PersonSelect } from './common'
+import { ConfirmButton, EmptyState, NumberInput, PersonSelect } from './common'
 
 function TrendCell({ metric, cur, prev }: { metric: Metric; cur?: number; prev?: number }) {
   if (cur == null || prev == null) return <span className="trend trend-none">—</span>
@@ -110,15 +110,9 @@ function MetricRow({ metric, cadence }: { metric: Metric; cadence: Cadence }) {
           <TrendCell metric={metric} cur={cur} prev={prev} />
         </td>
         <td>
-          <button
-            className="icon-btn danger"
-            title="Delete metric"
-            onClick={() => {
-              if (confirm(`Delete metric "${metric.name}"?`)) actions.removeMetric(metric.id)
-            }}
-          >
+          <ConfirmButton title="Delete metric" onConfirm={() => actions.removeMetric(metric.id)}>
             ✕
-          </button>
+          </ConfirmButton>
         </td>
       </tr>
       {expanded && (

@@ -1,3 +1,4 @@
+import { useEffect, useState, type ReactNode } from 'react'
 import type { RockStatus } from '../types'
 import { useApp } from '../store'
 
@@ -98,4 +99,56 @@ export function NumberInput({
 
 export function EmptyState({ children }: { children: React.ReactNode }) {
   return <p className="empty-state">{children}</p>
+}
+
+/**
+ * A destructive-action button that confirms inline instead of with
+ * `window.confirm()` — the artifact viewer runs the page in a sandboxed
+ * iframe without `allow-modals`, where `confirm()` returns `false`
+ * immediately with no dialog shown, silently no-op'ing the action. Click
+ * once to arm (shows `confirmLabel` for a few seconds), click again to
+ * actually run `onConfirm`; it disarms on its own if left alone.
+ */
+export function ConfirmButton({
+  onConfirm,
+  title,
+  confirmLabel = 'Sure?',
+  className = 'icon-btn danger',
+  children,
+}: {
+  onConfirm: () => void
+  title: string
+  confirmLabel?: string
+  className?: string
+  children: ReactNode
+}) {
+  const [armed, setArmed] = useState(false)
+
+  useEffect(() => {
+    if (!armed) return
+    const t = setTimeout(() => setArmed(false), 3000)
+    return () => clearTimeout(t)
+  }, [armed])
+
+  if (armed) {
+    return (
+      <button
+        type="button"
+        className={`${className} confirm-armed`}
+        title="Click again to confirm"
+        onClick={() => {
+          setArmed(false)
+          onConfirm()
+        }}
+      >
+        {confirmLabel}
+      </button>
+    )
+  }
+
+  return (
+    <button type="button" className={className} title={title} onClick={() => setArmed(true)}>
+      {children}
+    </button>
+  )
 }
