@@ -12,3 +12,7 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+
+# Ecolens Pipeline CRM (Node)
+crm/dist/
+crm/dist-single/

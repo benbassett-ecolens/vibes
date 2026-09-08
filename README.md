@@ -1,8 +1,9 @@
 # vibes
 
-Ecolens internal apps. Two projects live in this repo:
+Ecolens internal apps. Three projects live in this repo:
 
 - **Ecolens L10** — EOS Level 10 meeting hub (scorecard, rocks, headlines, issues, ratings). Docs directly below.
+- **Ecolens Pipeline** — a Pipedrive-style CRM for the partner-services sales pipeline (`crm/`). Docs after L10.
 - **Stock deal desk** — an agent swarm that screens equities and sizes positions. Docs in the second half of this file.
 
 ---
@@ -96,6 +97,51 @@ Firestore is an equivalent choice if you'd rather stay all-Google.
 
 *EOS® and Level 10 Meeting™ are trademarks of EOS Worldwide. This is an internal tool inspired by
 the concepts in* Traction*, not an official EOS product.*
+
+---
+
+# Ecolens Pipeline 🧭
+
+A Pipedrive-style CRM for the partner-services pipeline, populated from the
+[Ecolens Sales Pipeline](https://docs.google.com/spreadsheets/d/1-Pcn2rGjkQVBK3wTy0mm8ZzQKG1Z8aBULBf7fDeaatE/edit)
+sheet (imported 2026-09-08). Lives under `crm/` and shares the repo's React + Vite toolchain.
+
+**Live:** published as a claude.ai artifact with a shared team database, so everyone the page is
+shared with sees the same board — https://claude.ai/code/artifact/698ceb48-74a1-46e1-8516-8a3eec5eeca3
+
+## What's inside
+
+| View | What it does |
+| --- | --- |
+| **Deals · Board** | Kanban with one column per stage (Cold Prospect → Introduction Made → Discovery of SOW → Demo of Ecolens → Proposal → Contract Sent, plus Closed Won / Deferred / Closed Lost). Drag a card to change stage; each card shows value, owner, ecosystems, and the next activity (red = overdue, amber = today, dashed = none scheduled). |
+| **Deals · List** | Sortable table: stage, owner, retainer / performance / total, close date, next activity. |
+| **Deal drawer** | Click any deal: stage progress bar, Won / Lost / Defer buttons, **Notes** timeline, **Activities** (calls, meetings, emails, tasks, deadlines with due dates), **Details** (retainer ACV, performance ACV, total, expected close, renewal date + contract term, forecast category, ecosystems, BU, ISV/VAR/Other, lost reason), and **Contacts**. |
+| **Activities** | Everything planned across all deals bucketed Overdue / Today / This week / Later, plus the open deals with no next step. |
+| **Contacts** | People named in the sheet notes, linked to their deals. |
+| **Insights** | Editable dashboards. Widgets are number tiles, bar charts, donuts, lists or tables over any measure (count, total contract value, retainer, performance, weighted by stage probability, average, win rate), any deal scope (open, won, lost, won this year, closing this quarter…) and any grouping (stage, owner, ecosystem, BU, partner type, close month, forecast). Add, edit, reorder and remove widgets; add more dashboards. Two ship by default: *Sales overview* and *Revenue & renewals* (upcoming renewal dates for won deals). |
+| **Settings** | Team members, stages (rename, reorder, probability, kind), export/import JSON, reset to the sheet import. |
+
+## How the sheet was interpreted
+
+Every deal, note, contact and activity traces to a cell in the sheet (see `crm/src/seed.ts`):
+
+- Notes recording something that happened ("Met with Tim on 9/2") became **completed activities** on that date.
+- Notes naming a dated next step ("Meet with Mike Berg 9/15") became **scheduled activities**; a past date shows as overdue.
+- Next steps with no date were scheduled for the next working day and say so in the activity note.
+- The **Forecast/Upside tab** attached as older notes (dated mid-July 2026) and set each deal's forecast category. *Business Fitness* appears only on that tab and is tagged accordingly.
+- Won deals get a **renewal date** 12 months after close (editable). Where the sheet's total differs from retainer + performance, the sheet total is kept as an override.
+
+## Develop
+
+```bash
+npm run dev:crm             # local dev server for the CRM
+npm test                    # includes crm/src/insights.test.ts (import + dashboard math)
+npm run build:crm           # type-check + production build → crm/dist/
+npm run build:crm:single    # self-contained crm/dist-single/index.html (what the artifact runs)
+```
+
+Storage works like L10: shared realtime store inside the artifact (`crm/src/dbSync.ts`),
+`localStorage` with JSON export/import everywhere else.
 
 ---
 
