@@ -1,74 +1,30 @@
-# Deal desk — risk on — 2 idea(s)
+# Deal desk — risk on — 0 idea(s)
 
-> ✅ **Live data.** Live from yahoo finance (universe discovered via yahoo's screener); 30 over-the-counter listing(s) excluded.
+> ✅ **Live data.** Live from yahoo finance (universe discovered via yahoo's screener); 34 over-the-counter listing(s) excluded.
 
 ## What kind of day is it?
 
 The broad market is trending up and reasonably calm, so the desk is willing to use its **full** risk budget.
 
-- The market index is **+7.8%** versus its long-run average.
-- **50%** of the stocks it looked at are in their own uptrend.
+- The market index is **+7.3%** versus its long-run average.
+- **67%** of the stocks it looked at are in their own uptrend.
 - Volatility is running at **13%** a year (calm).
 
 ## What the desk would buy
 
-Assuming a **$100,000** account. Total committed: **$19,994** (20% of the account). If every single one hit its exit price you would lose **$1,388** (1.4% of the account).
-
-### 1. NU — Nu Holdings Ltd.
-*Financial Services · $15.33 a share*
-
-| | |
-|---|---|
-| **Buy** | 652 shares at ~$15.33 = **$9,995** |
-| **Sell if it drops to** | $13.52 — you would lose **$1,183** (1.2% of the account) |
-| **Take profit near** | $18.67 — you would make **~$2,175** |
-| **Risking $1 to make** | $1.84 |
-
-**Why the desk likes it**
-
-- The price chart looks strong — it is trending up on rising volume.
-- It is up **32%** over the last three months.
-- It pays no dividend, so the entire return has to come from the price.
-- Its P/E is **21** — expensive against current earnings, which is what this screen is deliberately looking for (see the README on why).
-
-**What could go wrong**
-
-- The desk wanted to buy more but capped this at 10% of the account so one bad name cannot do too much damage.
-
-### 2. HLN — Haleon plc
-*Healthcare · $9.25 a share*
-
-| | |
-|---|---|
-| **Buy** | 1,081 shares at ~$9.25 = **$9,999** |
-| **Sell if it drops to** | $9.06 — you would lose **$205** (0.2% of the account) |
-| **Take profit near** | $10.10 — you would make **~$924** |
-| **Risking $1 to make** | $4.50 |
-
-**Why the desk likes it**
-
-- The chart is unremarkable; this one is carried by the other signals.
-- It pays a **2.1%** dividend and the company earns more than enough to cover it.
-- Headline: *Reckitt Benckiser shares rise over 4% as JP Morgan upgrades to 'overweight' (Proactive)*
-- Its P/E is **19** — expensive against current earnings, which is what this screen is deliberately looking for (see the README on why).
-
-**What could go wrong**
-
-- The desk wanted to buy more but capped this at 10% of the account so one bad name cannot do too much damage.
+**Nothing today.** Every candidate failed at least one check. That is a real answer, not a bug — most days a strict screen should come up empty.
 
 <details>
-<summary>Rejected: 8 names, and why (click to expand)</summary>
+<summary>Rejected: 6 names, and why (click to expand)</summary>
 
 | Ticker | Name | Price | Rejected because |
 |---|---|---:|---|
-| MFG | Mizuho Financial Group, Inc. Sp | $11.14 | failed the screen: P/E 15.5 below the 18 'high P/E' floor; reward:risk 1.7 below the 1.8 minimum |
-| UMC | United Microelectronics Corpora | $21.82 | failed the screen: $21.82 above the $20 price ceiling |
-| VALE | VALE S.A. | $15.56 | reward:risk 1.1 below the 1.8 minimum; payout ratio 159% exceeds 120% -- the 7.6% yield is not covered by earnings and is a cut candidate |
-| NOK | Nokia Corporation Sponsored | $10.65 | reward:risk 1.5 below the 1.8 minimum |
-| GS-PD | Goldman Sachs Group, Inc. (The) | $18.71 | failed the screen: P/E 0.4 below the 18 'high P/E' floor; $0M market cap below the floor |
-| MS-PK | Morgan Stanley Depositary Share | $22.13 | failed the screen: P/E 2.8 below the 18 'high P/E' floor; $22.13 above the $20 price ceiling; $1.9M daily dollar volume is too thin to trade; $0M m... |
-| MS-PA | Morgan Stanley Dep Shs repstg 1 | $18.82 | failed the screen: P/E 2.4 below the 18 'high P/E' floor; $1.7M daily dollar volume is too thin to trade; $0M market cap below the floor |
-| JPM-PD | J P Morgan Chase & Co Depositar | $22.78 | failed the screen: P/E 1.7 below the 18 'high P/E' floor; $22.78 above the $20 price ceiling; $0M market cap below the floor |
+| UMC | United Microelectronics Corpora | $22.34 | failed the screen: P/E 21.5 below the 25 'high P/E' floor |
+| PFE | Pfizer, Inc. | $27.93 | failed the screen: $27.93 above the $25 price ceiling; reward:risk 1.7 below the 1.8 minimum; payout ratio 226% exceeds 120% -- the 6.2% yield is n... |
+| VALE | VALE S.A. | $15.44 | reward:risk 1.2 below the 1.8 minimum; payout ratio 159% exceeds 120% -- the 7.6% yield is not covered by earnings and is a cut candidate |
+| KVUE | Kenvue Inc. | $17.73 | failed the screen: P/E 20.9 below the 25 'high P/E' floor |
+| NOK | Nokia Corporation Sponsored | $10.85 | reward:risk 1.5 below the 1.8 minimum |
+| RKT | Rocket Companies, Inc. | $13.64 | failed the screen: no trailing P/E (unprofitable or not reported) |
 
 </details>
 
