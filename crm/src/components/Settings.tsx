@@ -4,6 +4,7 @@ import { useDataControls } from '../App'
 import { SHEET_URL } from '../seed'
 import type { StageKind } from '../types'
 import { Avatar } from './common'
+import { SheetSyncPanel } from './SheetSync'
 
 export function Settings() {
   const { data, actions, syncStatus } = useApp()
@@ -120,17 +121,19 @@ export function Settings() {
         </form>
       </section>
 
+      <SheetSyncPanel />
+
       <section className="panel">
         <h3>Data</h3>
         <p className="muted small">
           {syncStatus === 'live'
             ? 'This is a shared workspace: everyone the page is shared with sees the same pipeline, live.'
             : 'Data is stored in this browser. Export to back it up or move it.'}{' '}
-          Records were imported from the{' '}
+          The{' '}
           <a href={SHEET_URL} target="_blank" rel="noreferrer">
-            Ecolens Sales Pipeline sheet
+            pipeline sheet
           </a>{' '}
-          on Sep 8, 2026.
+          was first imported on Sep 8, 2026; "Reset to sheet import" restores that snapshot.
         </p>
         <div className="data-controls">
           <button onClick={exportJson}>Export JSON</button>

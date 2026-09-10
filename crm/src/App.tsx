@@ -11,7 +11,9 @@ import { Insights } from './components/Insights'
 import { Settings } from './components/Settings'
 import { NewDealModal } from './components/NewDealModal'
 import { PersonSelect } from './components/common'
+import { SheetSyncButton } from './components/SheetSync'
 import { openActivities } from './insights'
+import { useSheetSync } from './useSheetSync'
 
 const NAV = [
   { id: 'deals', label: 'Deals', icon: '▦' },
@@ -102,9 +104,10 @@ function Shell() {
   const [showNewDeal, setShowNewDeal] = useState(false)
 
   const overdue = useMemo(() => openActivities(data, 'overdue').length, [data])
+  const sheet = useSheetSync()
   const ui = useMemo(
-    () => ({ openDeal: (id: string) => setOpenDealId(id), ownerFilter, search }),
-    [ownerFilter, search],
+    () => ({ openDeal: (id: string) => setOpenDealId(id), ownerFilter, search, sheet }),
+    [ownerFilter, search, sheet],
   )
   const openDeal = openDealId ? data.deals.find((d) => d.id === openDealId) : undefined
 
@@ -187,6 +190,7 @@ function Shell() {
                   <PersonSelect value={ownerFilter} onChange={setOwnerFilter} emptyLabel="Everyone" className="owner-filter" />
                 </>
               )}
+              <SheetSyncButton />
               <button className="primary" onClick={() => setShowNewDeal(true)}>
                 + Deal
               </button>

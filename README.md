@@ -102,9 +102,9 @@ the concepts in* Traction*, not an official EOS product.*
 
 # Ecolens Pipeline 🧭
 
-A Pipedrive-style CRM for the partner-services pipeline, populated from the
+A Pipedrive-style CRM for the partner-services pipeline, kept in sync with the
 [Ecolens Sales Pipeline](https://docs.google.com/spreadsheets/d/1-Pcn2rGjkQVBK3wTy0mm8ZzQKG1Z8aBULBf7fDeaatE/edit)
-sheet (imported 2026-09-08). Lives under `crm/` and shares the repo's React + Vite toolchain.
+sheet (first imported 2026-09-08). Lives under `crm/` and shares the repo's React + Vite toolchain.
 
 **Live:** published as a claude.ai artifact with a shared team database, so everyone the page is
 shared with sees the same board — https://claude.ai/code/artifact/698ceb48-74a1-46e1-8516-8a3eec5eeca3
@@ -119,7 +119,29 @@ shared with sees the same board — https://claude.ai/code/artifact/698ceb48-74a
 | **Activities** | Everything planned across all deals bucketed Overdue / Today / This week / Later, plus the open deals with no next step. |
 | **Contacts** | People named in the sheet notes, linked to their deals. |
 | **Insights** | Editable dashboards. Widgets are number tiles, bar charts, donuts, lists or tables over any measure (count, total contract value, retainer, performance, weighted by stage probability, average, win rate), any deal scope (open, won, lost, won this year, closing this quarter…) and any grouping (stage, owner, ecosystem, BU, partner type, close month, forecast). Add, edit, reorder and remove widgets; add more dashboards. Two ship by default: *Sales overview* and *Revenue & renewals* (upcoming renewal dates for won deals). |
-| **Settings** | Team members, stages (rename, reorder, probability, kind), export/import JSON, reset to the sheet import. |
+| **Settings** | Team members, stages (rename, reorder, probability, kind), Google Sheet sync status and auto-sync toggle, export/import JSON, reset to the sheet import. |
+
+## Staying in sync with the sheet
+
+The published page reads the sheet through the viewer's **Google Drive connector** (the artifact
+declares the `mcp` capability for the single `download_file_content` tool). A **Sync sheet** button
+in the top bar re-reads it on demand, and the page re-reads it automatically on open when the last
+sync is more than an hour old (toggle in Settings → Google Sheet). Sync results are shared: the
+merged deals land in the team database, so one person syncing updates everyone.
+
+Merge rules (`crm/src/sheetSync.ts`, tested in `sheetSync.test.ts`):
+
+- A deal is linked to a row by its normalized **Prospect Name** (`deal.sheetKey`); each linked deal
+  keeps the row's cells as of the last sync (`deal.sheetSnapshot`).
+- A cell that **changed on the sheet** since the snapshot updates the matching CRM field.
+- A CRM field edited here is **kept** as long as its sheet cell did not change.
+- A changed **Notes** cell appends a new note; the notes timeline is never rewritten.
+- **New rows** become new deals; unknown owners/stages are created. Rows that disappear tag their
+  deal "Removed from sheet" instead of deleting it.
+- Nothing is written back to the sheet — the Drive connector here is read-only for spreadsheet cells.
+
+Viewers without Google Drive connected in claude.ai still see the shared data; only the sync button
+is unavailable for them, and Settings explains what to connect.
 
 ## How the sheet was interpreted
 

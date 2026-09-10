@@ -26,11 +26,14 @@ import type {
   Dashboard,
   Deal,
   ForecastCategory,
+  Meta,
   Note,
   Person,
   Stage,
   Widget,
 } from './types'
+import { SHEET_CSV_2026_09_08 } from './sheetSnapshot'
+import { rowsFromCsv, sheetKeyOf } from './sheetSync'
 
 export const SHEET_URL =
   'https://docs.google.com/spreadsheets/d/1-Pcn2rGjkQVBK3wTy0mm8ZzQKG1Z8aBULBf7fDeaatE/edit'
@@ -537,9 +540,11 @@ export function seedData(): AppData {
   const notes: Note[] = []
   const activities: Activity[] = []
   const contacts: Contact[] = []
+  const snapshots = new Map(rowsFromCsv(SHEET_CSV_2026_09_08).map((r) => [sheetKeyOf(r.name), r]))
 
   for (const row of ROWS) {
     const id = `d-${row.slug}`
+    const snapshot = snapshots.get(sheetKeyOf(row.name)) ?? null
     const ownerId = OWNER[row.owner]
     const stageId = STAGE[row.stage]
     const sum = (row.retainer ?? 0) + (row.performance ?? 0)
@@ -565,6 +570,8 @@ export function seedData(): AppData {
       tags: row.tags ?? [],
       createdAt: CREATED_AT,
       source: 'sheet',
+      sheetKey: snapshot ? sheetKeyOf(row.name) : '',
+      sheetSnapshot: snapshot,
     })
     row.notes.forEach((n, i) => {
       notes.push({
@@ -664,6 +671,16 @@ export function seedData(): AppData {
     w('w-r-top', 'dash-revenue', 'Largest open deals', { type: 'table', listKind: 'topOpen', size: 'lg', limit: 10 }),
   ]
 
+  const meta: Meta[] = [
+    {
+      id: 'sync',
+      lastSheetSyncAt: `${IMPORT_DATE}T09:00:00.000Z`,
+      lastSheetSyncSummary: 'Initial import: 46 rows',
+      lastSheetSyncBy: 'import',
+      autoSync: true,
+    },
+  ]
+
   return {
     people: PEOPLE,
     stages: STAGES,
@@ -673,5 +690,6 @@ export function seedData(): AppData {
     contacts,
     dashboards,
     widgets,
+    meta,
   }
 }

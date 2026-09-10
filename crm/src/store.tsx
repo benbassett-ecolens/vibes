@@ -13,6 +13,7 @@ import type {
   Contact,
   Dashboard,
   Deal,
+  Meta,
   Note,
   Person,
   Stage,
@@ -35,6 +36,7 @@ export function emptyData(): AppData {
     contacts: [],
     dashboards: [],
     widgets: [],
+    meta: [],
   }
 }
 
@@ -171,6 +173,8 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
         tags: [],
         createdAt: nowISO(),
         source: 'app',
+        sheetKey: '',
+        sheetSnapshot: null,
       }
       setData((d) => ({ ...d, deals: [deal, ...d.deals] }))
       return id
@@ -296,7 +300,33 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
     removeWidget(id: string) {
       setData((d) => ({ ...d, widgets: d.widgets.filter((w) => w.id !== id) }))
     },
+
+    // Workspace meta (sheet sync status / settings)
+    updateMeta(patch: Partial<Meta>) {
+      setData((d) => {
+        const current = d.meta.find((m) => m.id === 'sync') ?? {
+          id: 'sync',
+          lastSheetSyncAt: '',
+          lastSheetSyncSummary: '',
+          lastSheetSyncBy: '',
+          autoSync: true,
+        }
+        return { ...d, meta: [{ ...current, ...patch }, ...d.meta.filter((m) => m.id !== 'sync')] }
+      })
+    },
   }
+}
+
+export function syncMeta(data: AppData): Meta {
+  return (
+    data.meta.find((m) => m.id === 'sync') ?? {
+      id: 'sync',
+      lastSheetSyncAt: '',
+      lastSheetSyncSummary: '',
+      lastSheetSyncBy: '',
+      autoSync: true,
+    }
+  )
 }
 
 export type Actions = ReturnType<typeof makeActions>

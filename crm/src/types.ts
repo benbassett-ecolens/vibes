@@ -52,6 +52,36 @@ export interface Deal {
   createdAt: string
   /** Where the record came from — 'sheet' rows were imported from the pipeline spreadsheet. */
   source: 'sheet' | 'app'
+  /** Normalized "Prospect Name" that links this deal to a sheet row; '' when not on the sheet. */
+  sheetKey: string
+  /** The sheet row's cells as of the last sync — the baseline for detecting sheet-side changes. */
+  sheetSnapshot: SheetRow | null
+}
+
+/** One row of the pipeline sheet, cells kept as strings exactly as exported. */
+export interface SheetRow {
+  owner: string
+  name: string
+  product: string
+  bu: string
+  type: string
+  eco: string
+  retainer: string
+  performance: string
+  tcv: string
+  stage: string
+  close: string
+  notes: string
+}
+
+/** Workspace-level settings and status (single document, id 'sync'). */
+export interface Meta {
+  id: string
+  lastSheetSyncAt: string
+  lastSheetSyncSummary: string
+  lastSheetSyncBy: string
+  /** Re-read the sheet automatically when the page opens and the last sync is stale. */
+  autoSync: boolean
 }
 
 export interface Note {
@@ -141,6 +171,7 @@ export interface AppData {
   contacts: Contact[]
   dashboards: Dashboard[]
   widgets: Widget[]
+  meta: Meta[]
 }
 
 export const COLLECTIONS = [
@@ -152,5 +183,6 @@ export const COLLECTIONS = [
   'contacts',
   'dashboards',
   'widgets',
+  'meta',
 ] as const
 export type CollectionName = (typeof COLLECTIONS)[number]
