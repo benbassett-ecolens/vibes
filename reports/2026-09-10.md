@@ -1,59 +1,29 @@
-# Deal desk — risk on — 1 idea(s)
+# Deal desk — risk on — 0 idea(s)
 
-> ✅ **Live data.** Live from yahoo finance (universe discovered via yahoo's screener); 25 over-the-counter listing(s) excluded.
+> ✅ **Live data.** Live from yahoo finance (universe discovered via yahoo's screener); 35 over-the-counter listing(s) excluded.
 
 ## What kind of day is it?
 
 The broad market is trending up and reasonably calm, so the desk is willing to use its **full** risk budget.
 
-- The market index is **+6.6%** versus its long-run average.
-- **47%** of the stocks it looked at are in their own uptrend.
+- The market index is **+6.7%** versus its long-run average.
+- **60%** of the stocks it looked at are in their own uptrend.
 - Volatility is running at **13%** a year (calm).
 
 ## What the desk would buy
 
-Assuming a **$100,000** account. Total committed: **$9,985** (10% of the account). If every single one hit its exit price you would lose **$1,141** (1.1% of the account).
-
-### 1. NU — Nu Holdings Ltd.
-*Financial Services · $15.20 a share*
-
-| | |
-|---|---|
-| **Buy** | 657 shares at ~$15.20 = **$9,985** |
-| **Sell if it drops to** | $13.46 — you would lose **$1,141** (1.1% of the account) |
-| **Take profit near** | $18.67 — you would make **~$2,279** |
-| **Risking $1 to make** | $2.00 |
-
-**Why the desk likes it**
-
-- The price chart looks strong — it is trending up on rising volume.
-- It is up **31%** over the last three months.
-- It pays no dividend, so the entire return has to come from the price.
-- Its P/E is **21** — expensive against current earnings, which is what this screen is deliberately looking for (see the README on why).
-
-**What could go wrong**
-
-- The desk wanted to buy more but capped this at 10% of the account so one bad name cannot do too much damage.
+**Nothing today.** Every candidate failed at least one check. That is a real answer, not a bug — most days a strict screen should come up empty.
 
 <details>
-<summary>Rejected: 14 names, and why (click to expand)</summary>
+<summary>Rejected: 5 names, and why (click to expand)</summary>
 
 | Ticker | Name | Price | Rejected because |
 |---|---|---:|---|
-| SAN | Banco Santander, S.A. Sponsored | $14.62 | failed the screen: P/E 14.2 below the 15 'high P/E' floor |
-| MUFG | Mitsubishi UFJ Financial Group, | $23.36 | failed the screen: $23.36 above the $20 price ceiling; reward:risk 1.7 below the 1.8 minimum |
-| ET | Energy Transfer LP | $21.70 | failed the screen: P/E 14.9 below the 15 'high P/E' floor; $21.70 above the $20 price ceiling; reward:risk 1.5 below the 1.8 minimum |
-| LYG | Lloyds Banking Group Plc | $5.88 | failed the screen: P/E 13.7 below the 15 'high P/E' floor |
-| SONY | Sony Group Corporation | $23.59 | failed the screen: $23.59 above the $20 price ceiling |
-| MFG | Mizuho Financial Group, Inc. Sp | $11.04 | reward:risk 1.7 below the 1.8 minimum |
-| AMX | America Movil, S.A.B. de C.V. | $22.78 | failed the screen: P/E 13.0 below the 15 'high P/E' floor; $22.78 above the $20 price ceiling |
-| VALE | VALE S.A. | $15.23 | reward:risk 1.4 below the 1.8 minimum; payout ratio 159% exceeds 120% -- the 7.7% yield is not covered by earnings and is a cut candidate |
-| BAC-PB | Bank of America Corporation Dep | $23.29 | failed the screen: P/E 6.6 below the 15 'high P/E' floor; $23.29 above the $20 price ceiling; $0M market cap below the floor |
-| WFC-PC | Wells Fargo & Company Depositar | $15.90 | failed the screen: $1.6M daily dollar volume is too thin to trade |
-| HDB | HDFC Bank Limited | $21.84 | failed the screen: $21.84 above the $20 price ceiling |
-| GS-PD | Goldman Sachs Group, Inc. (The) | $18.61 | failed the screen: P/E 0.4 below the 15 'high P/E' floor; $0M market cap below the floor |
-| JPM-PD | J P Morgan Chase & Co Depositar | $22.43 | failed the screen: P/E 1.7 below the 15 'high P/E' floor; $22.43 above the $20 price ceiling; $0M market cap below the floor |
-| MS-PA | Morgan Stanley Dep Shs repstg 1 | $18.62 | failed the screen: P/E 2.4 below the 15 'high P/E' floor; $1.7M daily dollar volume is too thin to trade; $0M market cap below the floor |
+| PFE | Pfizer, Inc. | $27.52 | failed the screen: $27.52 above the $25 price ceiling; reward:risk 1.1 below the 1.8 minimum; payout ratio 226% exceeds 120% -- the 6.2% yield is n... |
+| VALE | VALE S.A. | $15.24 | reward:risk 1.4 below the 1.8 minimum; payout ratio 159% exceeds 120% -- the 7.7% yield is not covered by earnings and is a cut candidate |
+| KVUE | Kenvue Inc. | $17.82 | failed the screen: P/E 21.0 below the 25 'high P/E' floor |
+| NOK | Nokia Corporation Sponsored | $10.71 | reward:risk 1.5 below the 1.8 minimum |
+| RKT | Rocket Companies, Inc. | $13.14 | failed the screen: no trailing P/E (unprofitable or not reported) |
 
 </details>
 
