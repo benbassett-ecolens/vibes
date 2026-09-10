@@ -47,6 +47,15 @@ on:
 permissions:
   contents: write
 
+# Only one run pushes to main at a time. This does not by itself fix a stale
+# rerun (see the retry loop below) but it stops two genuinely-concurrent runs
+# -- a manual click landing next to a scheduled fire, say -- from racing each
+# other in the first place. cancel-in-progress is false because a queued run
+# should still get its own report, not be thrown away.
+concurrency:
+  group: deal-desk-main-push
+  cancel-in-progress: false
+
 jobs:
   desk:
     runs-on: ubuntu-latest
@@ -124,16 +133,43 @@ jobs:
           if-no-files-found: warn
 
       - name: Commit the report back to the repo
+        # A plain "commit, push" fails outright if main has moved since this
+        # job checked it out -- which happens whenever a run is manually
+        # re-run after already having succeeded once (a rerun replays against
+        # the ORIGINAL commit the run first saw, not the branch's current
+        # tip), or whenever two runs land close enough together to overlap.
+        # The concurrency group above stops the second case; this retry loop
+        # covers the first: on a rejected push, re-fetch the real tip, replay
+        # this run's report commit on top of it (favoring our just-generated
+        # files over whatever an older version of them looked like -- there
+        # is no "merge" of two market snapshots, only "which one is newer"),
+        # and try again.
         run: |
+          set -o pipefail
           git config user.name "deal-desk-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add reports data/live-snapshot.json
           if git diff --staged --quiet; then
             echo "Nothing changed."
-          else
-            git commit -m "Deal desk report ${{ steps.desk.outputs.stamp }}"
-            git push origin "HEAD:${{ github.ref_name }}"
+            exit 0
           fi
+          git commit -m "Deal desk report ${{ steps.desk.outputs.stamp }}"
+
+          for attempt in 1 2 3 4 5; do
+            if git push origin "HEAD:${{ github.ref_name }}"; then
+              echo "Pushed on attempt $attempt."
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt/5) -- main moved since checkout. Replaying on top of the current tip."
+            git fetch origin "${{ github.ref_name }}"
+            git reset --soft "origin/${{ github.ref_name }}"
+            git add reports data/live-snapshot.json
+            git commit -m "Deal desk report ${{ steps.desk.outputs.stamp }}"
+            sleep $((attempt * 3))
+          done
+
+          echo "::error::Could not push the report after 5 attempts -- main kept moving underneath this run."
+          exit 1
 
       - name: Fail the run if the desk itself failed
         if: steps.desk.outputs.ok == 'false'
