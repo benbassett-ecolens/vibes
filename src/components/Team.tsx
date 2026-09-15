@@ -1,10 +1,21 @@
 import { useState } from 'react'
 import { useApp } from '../store'
-import { EmptyState } from './common'
+import { defaultSort, sortItems, type SortState } from '../sort'
+import { ConfirmButton, EmptyState, SortSelect } from './common'
+
+type TeamSortField = 'name'
 
 export function Team() {
   const { data, actions } = useApp()
   const [name, setName] = useState('')
+  const [sort, setSort] = useState<SortState<TeamSortField>>(defaultSort)
+
+  const people = sortItems(data.people, sort, (p, field) => {
+    switch (field) {
+      case 'name':
+        return p.name
+    }
+  })
 
   return (
     <section>
@@ -16,6 +27,7 @@ export function Team() {
             when rating a meeting.
           </p>
         </div>
+        <SortSelect value={sort} onChange={setSort} options={[{ value: 'name', label: 'Name' }]} />
       </div>
 
       <form
@@ -36,27 +48,23 @@ export function Team() {
         </button>
       </form>
 
-      {data.people.length === 0 ? (
+      {people.length === 0 ? (
         <EmptyState>No teammates yet.</EmptyState>
       ) : (
         <ul className="team-list">
-          {data.people.map((p) => (
+          {people.map((p) => (
             <li key={p.id}>
               <input
                 className="ghost grow"
                 value={p.name}
                 onChange={(e) => actions.renamePerson(p.id, e.target.value)}
               />
-              <button
-                className="icon-btn danger"
-                title="Remove teammate"
-                onClick={() => {
-                  if (confirm(`Remove ${p.name}? Items they own will show "—".`))
-                    actions.removePerson(p.id)
-                }}
+              <ConfirmButton
+                title={`Remove teammate — items they own will show "—"`}
+                onConfirm={() => actions.removePerson(p.id)}
               >
                 ✕
-              </button>
+              </ConfirmButton>
             </li>
           ))}
         </ul>

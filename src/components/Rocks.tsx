@@ -1,7 +1,18 @@
 import { useState } from 'react'
-import type { Rock } from '../types'
+import type { Rock, RockStatus } from '../types'
 import { useApp } from '../store'
-import { EmptyState, PersonSelect } from './common'
+import { defaultSort, sortItems, type SortState } from '../sort'
+import { ConfirmButton, EmptyState, PersonSelect, SortSelect, StatusSelect, usePersonName } from './common'
+
+type RockSortField = 'name' | 'owner' | 'dueDate' | 'status' | 'progress'
+
+const STATUS_RANK: Record<RockStatus, number> = { off_track: 0, on_track: 1, completed: 2 }
+
+function rockProgress(rock: Rock): number {
+  const total = rock.milestones.length
+  if (total === 0) return 0
+  return rock.milestones.filter((m) => m.status === 'completed').length / total
+}
 
 function daysUntil(dateStr: string): number | null {
   if (!dateStr) return null
@@ -17,7 +28,7 @@ function RockCard({ rock }: { rock: Rock }) {
   const [msName, setMsName] = useState('')
   const [msOwnerId, setMsOwnerId] = useState('')
 
-  const done = rock.milestones.filter((m) => m.done).length
+  const done = rock.milestones.filter((m) => m.status === 'completed').length
   const total = rock.milestones.length
   const pct = total === 0 ? 0 : Math.round((done / total) * 100)
   const days = daysUntil(rock.dueDate)
@@ -29,29 +40,21 @@ function RockCard({ rock }: { rock: Rock }) {
   }
 
   return (
-    <article className={`rock-card ${rock.completed ? 'rock-done' : ''}`}>
+    <article className={`rock-card ${rock.status === 'completed' ? 'rock-done' : ''}`}>
       <header className="rock-head">
-        <label className="check-lg" title="Mark Rock complete">
-          <input
-            type="checkbox"
-            checked={rock.completed}
-            onChange={(e) => actions.updateRock(rock.id, { completed: e.target.checked })}
-          />
-        </label>
+        <StatusSelect
+          value={rock.status}
+          onChange={(status) => actions.updateRock(rock.id, { status })}
+          title="Rock status"
+        />
         <input
           className="ghost rock-title"
           value={rock.name}
           onChange={(e) => actions.updateRock(rock.id, { name: e.target.value })}
         />
-        <button
-          className="icon-btn danger"
-          title="Delete Rock"
-          onClick={() => {
-            if (confirm(`Delete Rock "${rock.name}"?`)) actions.removeRock(rock.id)
-          }}
-        >
+        <ConfirmButton title="Delete Rock" onConfirm={() => actions.removeRock(rock.id)}>
           ✕
-        </button>
+        </ConfirmButton>
       </header>
 
       <div className="rock-meta">
@@ -70,12 +73,11 @@ function RockCard({ rock }: { rock: Rock }) {
             onChange={(e) => actions.updateRock(rock.id, { dueDate: e.target.value })}
           />
         </label>
-        {days != null && !rock.completed && (
+        {days != null && rock.status !== 'completed' && (
           <span className={`badge ${days < 0 ? 'badge-bad' : days <= 14 ? 'badge-warn' : 'badge-ok'}`}>
             {days < 0 ? `${-days}d overdue` : `${days}d left`}
           </span>
         )}
-        {rock.completed && <span className="badge badge-ok">Complete</span>}
       </div>
 
       <label className="blocker">
@@ -97,13 +99,13 @@ function RockCard({ rock }: { rock: Rock }) {
       <ul className="milestones">
         {rock.milestones.map((ms) => (
           <li key={ms.id}>
-            <input
-              type="checkbox"
-              checked={ms.done}
-              onChange={(e) => actions.updateMilestone(rock.id, ms.id, { done: e.target.checked })}
+            <StatusSelect
+              value={ms.status}
+              onChange={(status) => actions.updateMilestone(rock.id, ms.id, { status })}
+              title="Milestone status"
             />
             <input
-              className={`ghost grow ${ms.done ? 'strike' : ''}`}
+              className={`ghost grow ${ms.status === 'completed' ? 'strike' : ''}`}
               value={ms.name}
               onChange={(e) => actions.updateMilestone(rock.id, ms.id, { name: e.target.value })}
             />
@@ -145,9 +147,11 @@ function RockCard({ rock }: { rock: Rock }) {
 
 export function Rocks() {
   const { data, actions } = useApp()
+  const personName = usePersonName()
   const [name, setName] = useState('')
   const [ownerId, setOwnerId] = useState('')
   const [dueDate, setDueDate] = useState('')
+  const [sort, setSort] = useState<SortState<RockSortField>>(defaultSort)
 
   const submit = () => {
     if (!name.trim()) return
@@ -155,6 +159,21 @@ export function Rocks() {
     setName('')
     setDueDate('')
   }
+
+  const rocks = sortItems(data.rocks, sort, (r, field) => {
+    switch (field) {
+      case 'name':
+        return r.name
+      case 'owner':
+        return personName(r.ownerId)
+      case 'dueDate':
+        return r.dueDate
+      case 'status':
+        return STATUS_RANK[r.status]
+      case 'progress':
+        return rockProgress(r)
+    }
+  })
 
   return (
     <section>
@@ -167,6 +186,17 @@ export function Rocks() {
             track” — off-track Rocks drop to the Issues List.
           </p>
         </div>
+        <SortSelect
+          value={sort}
+          onChange={setSort}
+          options={[
+            { value: 'name', label: 'Name' },
+            { value: 'owner', label: 'Owner' },
+            { value: 'dueDate', label: 'Due date' },
+            { value: 'status', label: 'Status' },
+            { value: 'progress', label: 'Progress' },
+          ]}
+        />
       </div>
 
       <form
@@ -188,11 +218,11 @@ export function Rocks() {
         </button>
       </form>
 
-      {data.rocks.length === 0 ? (
+      {rocks.length === 0 ? (
         <EmptyState>No Rocks yet. Set 3–7 quarterly priorities above.</EmptyState>
       ) : (
         <div className="rock-grid">
-          {data.rocks.map((r) => (
+          {rocks.map((r) => (
             <RockCard key={r.id} rock={r} />
           ))}
         </div>

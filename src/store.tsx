@@ -17,6 +17,8 @@ import type {
   Milestone,
   Person,
   Rock,
+  RockStatus,
+  Segue,
 } from './types'
 import { lastNPeriods, toISODate } from './periods'
 import { startSync, type SyncEngine, type SyncStatus } from './dbSync'
@@ -39,6 +41,7 @@ export function emptyData(): AppData {
     issues: [],
     meetings: [],
     ratings: [],
+    segues: [],
   }
 }
 
@@ -113,12 +116,12 @@ export function seedData(): AppData {
       name: 'Launch customer sustainability dashboard v2',
       ownerId: ben.id,
       dueDate: toISODate(new Date(new Date().setDate(new Date().getDate() + 35))),
-      completed: false,
+      status: 'on_track',
       blocker: '',
       milestones: [
-        { id: uid(), name: 'Finalize dashboard spec', ownerId: ben.id, done: true, dueDate: '' },
-        { id: uid(), name: 'Beta with 3 pilot customers', ownerId: sam.id, done: false, dueDate: '' },
-        { id: uid(), name: 'GA launch + announcement', ownerId: ben.id, done: false, dueDate: '' },
+        { id: uid(), name: 'Finalize dashboard spec', ownerId: ben.id, status: 'completed', dueDate: '' },
+        { id: uid(), name: 'Beta with 3 pilot customers', ownerId: sam.id, status: 'on_track', dueDate: '' },
+        { id: uid(), name: 'GA launch + announcement', ownerId: ben.id, status: 'on_track', dueDate: '' },
       ],
     },
     {
@@ -126,11 +129,11 @@ export function seedData(): AppData {
       name: 'Document core sales process',
       ownerId: sam.id,
       dueDate: toISODate(new Date(new Date().setDate(new Date().getDate() + 50))),
-      completed: false,
+      status: 'off_track',
       blocker: 'Waiting on CRM export access',
       milestones: [
-        { id: uid(), name: 'Map current pipeline stages', ownerId: sam.id, done: true, dueDate: '' },
-        { id: uid(), name: 'Write playbook draft', ownerId: riley.id, done: false, dueDate: '' },
+        { id: uid(), name: 'Map current pipeline stages', ownerId: sam.id, status: 'completed', dueDate: '' },
+        { id: uid(), name: 'Write playbook draft', ownerId: riley.id, status: 'on_track', dueDate: '' },
       ],
     },
   ]
@@ -141,9 +144,11 @@ export function seedData(): AppData {
       name: 'Onboarding takes too long for new customers',
       term: 'short',
       raisedById: riley.id,
+      details: '',
       decision: '',
       implementerId: '',
       solved: false,
+      solvedAt: '',
       createdAt: today(),
     },
     {
@@ -151,9 +156,11 @@ export function seedData(): AppData {
       name: 'Do we expand into the EU market next year?',
       term: 'long',
       raisedById: ben.id,
+      details: '',
       decision: '',
       implementerId: '',
       solved: false,
+      solvedAt: '',
       createdAt: today(),
     },
   ]
@@ -165,6 +172,7 @@ export function seedData(): AppData {
       authorId: sam.id,
       date: today(),
       kind: 'customer',
+      done: false,
     },
     {
       id: uid(),
@@ -172,6 +180,7 @@ export function seedData(): AppData {
       authorId: ben.id,
       date: today(),
       kind: 'employee',
+      done: false,
     },
   ]
 
@@ -183,6 +192,7 @@ export function seedData(): AppData {
     issues,
     meetings: [],
     ratings: [],
+    segues: [],
   }
 }
 
@@ -201,6 +211,34 @@ function isAppData(value: unknown): value is AppData {
 export function normalizeData(raw: AppData): AppData {
   const data: AppData = { ...emptyData(), ...raw }
   data.ratings = Array.isArray(data.ratings) ? data.ratings : []
+  data.segues = Array.isArray(data.segues) ? data.segues : []
+  data.headlines = (raw.headlines ?? []).map((h) => ({ ...h, done: h.done ?? false }))
+  data.issues = (raw.issues ?? []).map((i) => ({
+    ...i,
+    details: i.details ?? '',
+    // Backfill: an already-solved issue with no recorded solve date reads
+    // as "solved this week" once, right after migration, rather than
+    // disappearing from view entirely.
+    solvedAt: i.solvedAt ?? (i.solved ? today() : ''),
+  }))
+  data.rocks = (raw.rocks ?? []).map((r) => {
+    const legacy = r as Rock & { completed?: boolean }
+    const status: RockStatus = legacy.status ?? (legacy.completed ? 'completed' : 'on_track')
+    const milestones = (r.milestones ?? []).map((m) => {
+      const legacyM = m as Milestone & { done?: boolean }
+      const mStatus: RockStatus = legacyM.status ?? (legacyM.done ? 'completed' : 'on_track')
+      return { id: m.id, name: m.name, ownerId: m.ownerId, dueDate: m.dueDate, status: mStatus }
+    })
+    return {
+      id: r.id,
+      name: r.name,
+      ownerId: r.ownerId,
+      dueDate: r.dueDate,
+      blocker: r.blocker ?? '',
+      status,
+      milestones,
+    }
+  })
   data.meetings = (raw.meetings ?? []).map((m) => {
     const legacy = m as Meeting & { ratings?: Array<{ personId: string; score: number }> }
     if (Array.isArray(legacy.ratings)) {
@@ -311,7 +349,7 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
         name,
         ownerId,
         dueDate,
-        completed: false,
+        status: 'on_track',
         blocker: '',
         milestones: [],
       }
@@ -324,7 +362,7 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
       setData((d) => ({ ...d, rocks: d.rocks.filter((r) => r.id !== id) }))
     },
     addMilestone(rockId: string, name: string, ownerId: string) {
-      const milestone: Milestone = { id: uid(), name, ownerId, done: false, dueDate: '' }
+      const milestone: Milestone = { id: uid(), name, ownerId, status: 'on_track', dueDate: '' }
       setData((d) => ({
         ...d,
         rocks: d.rocks.map((r) =>
@@ -352,14 +390,27 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
     },
 
     // Issues
-    addIssue(issue: Omit<Issue, 'id' | 'createdAt' | 'solved'>) {
+    addIssue(issue: Omit<Issue, 'id' | 'createdAt' | 'solved' | 'solvedAt'>) {
       setData((d) => ({
         ...d,
-        issues: [{ ...issue, id: uid(), createdAt: today(), solved: false }, ...d.issues],
+        issues: [
+          { ...issue, id: uid(), createdAt: today(), solved: false, solvedAt: '' },
+          ...d.issues,
+        ],
       }))
     },
     updateIssue(id: string, patch: Partial<Issue>) {
-      setData((d) => ({ ...d, issues: patchList(d.issues, id, patch) }))
+      setData((d) => ({
+        ...d,
+        issues: d.issues.map((i) => {
+          if (i.id !== id) return i
+          const next = { ...i, ...patch }
+          // Stamp/clear solvedAt whenever `solved` changes, so callers
+          // never have to remember to set it themselves.
+          if ('solved' in patch) next.solvedAt = patch.solved ? today() : ''
+          return next
+        }),
+      }))
     },
     removeIssue(id: string) {
       setData((d) => ({ ...d, issues: d.issues.filter((i) => i.id !== id) }))
@@ -405,6 +456,9 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
           ratings: removed
             ? d.ratings.filter((r) => !(r.meetingId === meetingId && r.personId === personId))
             : d.ratings,
+          segues: removed
+            ? d.segues.filter((s) => !(s.meetingId === meetingId && s.personId === personId))
+            : d.segues,
         }
       })
     },
@@ -413,7 +467,19 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
         ...d,
         meetings: d.meetings.filter((m) => m.id !== id),
         ratings: d.ratings.filter((r) => r.meetingId !== id),
+        segues: d.segues.filter((s) => s.meetingId !== id),
       }))
+    },
+    setSegue(meetingId: string, personId: string, text: string) {
+      const id = `${meetingId}~${personId}`
+      setData((d) => {
+        const segue: Segue = { id, meetingId, personId, text }
+        const exists = d.segues.some((s) => s.id === id)
+        return {
+          ...d,
+          segues: exists ? patchList(d.segues, id, segue) : [...d.segues, segue],
+        }
+      })
     },
   }
 }
@@ -433,7 +499,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     startedRef.current = true
     startSync({
       getData: () => dataRef.current,
-      applyRemote: (patch) => setData((d) => ({ ...d, ...patch })),
+      // Normalize remote snapshots too — the shared db can hold older
+      // shapes (e.g. rocks/milestones from before the status field)
+      // written by a client that hasn't loaded this version yet.
+      applyRemote: (patch) => setData((d) => normalizeData({ ...d, ...patch })),
       setStatus: setSyncStatus,
     }).then((engine) => {
       engineRef.current = engine

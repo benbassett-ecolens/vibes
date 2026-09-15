@@ -1,16 +1,21 @@
 import { useRef, useState } from 'react'
 import { AppProvider, emptyData, isAppData, normalizeData, seedData, useApp } from './store'
+import { StartMeeting } from './components/StartMeeting'
+import { SegueTab } from './components/Segue'
 import { Scorecard } from './components/Scorecard'
 import { Headlines } from './components/Headlines'
 import { Rocks } from './components/Rocks'
 import { Issues } from './components/Issues'
 import { MeetingTab } from './components/Meeting'
 import { Team } from './components/Team'
+import { ConfirmButton } from './components/common'
 
 const TABS = [
+  { id: 'start', label: 'Start a Meeting', icon: '🏁' },
+  { id: 'segue', label: 'Segue', icon: '🎤' },
+  { id: 'headlines', label: 'Headlines', icon: '📰' },
   { id: 'scorecard', label: 'Scorecard', icon: '📊' },
   { id: 'rocks', label: 'Rocks', icon: '🪨' },
-  { id: 'headlines', label: 'Headlines', icon: '📰' },
   { id: 'issues', label: 'Issues', icon: '🧩' },
   { id: 'meeting', label: 'Rate the Meeting', icon: '⭐' },
   { id: 'team', label: 'Team', icon: '👥' },
@@ -43,6 +48,7 @@ function SyncBadge() {
 function DataControls() {
   const { data, setData } = useApp()
   const fileRef = useRef<HTMLInputElement>(null)
+  const [importError, setImportError] = useState<string | null>(null)
 
   const exportJson = async () => {
     const json = JSON.stringify({ version: 2, data }, null, 2)
@@ -72,60 +78,63 @@ function DataControls() {
   }
 
   const importJson = (file: File) => {
+    setImportError(null)
     file.text().then((text) => {
       try {
         const parsed = JSON.parse(text)
         const candidate = parsed.data ?? parsed
         if (isAppData(candidate)) setData(normalizeData(candidate))
-        else alert('That file does not look like an Ecolens L10 export.')
+        else setImportError('That file does not look like an Ecolens L10 export.')
       } catch {
-        alert('Could not parse that file as JSON.')
+        setImportError('Could not parse that file as JSON.')
       }
     })
   }
 
   return (
-    <div className="data-controls">
-      <button onClick={exportJson} title="Download all data as JSON">
-        Export
-      </button>
-      <button onClick={() => fileRef.current?.click()} title="Load data from a JSON export">
-        Import
-      </button>
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".json,application/json"
-        hidden
-        onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (f) importJson(f)
-          e.target.value = ''
-        }}
-      />
-      <button
-        onClick={() => {
-          if (confirm('Replace everything with the sample data?')) setData(seedData())
-        }}
-        title="Reset to sample data"
-      >
-        Sample
-      </button>
-      <button
-        className="danger-text"
-        onClick={() => {
-          if (confirm('Delete ALL data? Export first if you want a backup.')) setData(emptyData())
-        }}
-        title="Clear all data"
-      >
-        Clear
-      </button>
+    <div className="data-controls-wrap">
+      <div className="data-controls">
+        <button onClick={exportJson} title="Download all data as JSON">
+          Export
+        </button>
+        <button onClick={() => fileRef.current?.click()} title="Load data from a JSON export">
+          Import
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) importJson(f)
+            e.target.value = ''
+          }}
+        />
+        <ConfirmButton
+          className=""
+          confirmLabel="Replace?"
+          title="Reset to sample data"
+          onConfirm={() => setData(seedData())}
+        >
+          Sample
+        </ConfirmButton>
+        <ConfirmButton
+          className="danger-text"
+          confirmLabel="Delete all?"
+          title="Clear all data"
+          onConfirm={() => setData(emptyData())}
+        >
+          Clear
+        </ConfirmButton>
+      </div>
+      {importError && <p className="import-error">{importError}</p>}
     </div>
   )
 }
 
 function Shell() {
-  const [tab, setTab] = useState<TabId>('scorecard')
+  const [tab, setTab] = useState<TabId>('start')
   const { syncStatus } = useApp()
 
   return (
@@ -135,7 +144,7 @@ function Shell() {
           <span className="brand-mark">🎯</span>
           <div>
             <h1>Ecolens L10</h1>
-            <p className="tagline">EOS Level 10 Meeting hub — scorecard, rocks, headlines, issues</p>
+            <p className="tagline">EOS Level 10 Meeting hub — run the agenda tab by tab</p>
           </div>
         </div>
         <div className="header-right">
@@ -159,9 +168,11 @@ function Shell() {
       </nav>
 
       <main>
+        {tab === 'start' && <StartMeeting />}
+        {tab === 'segue' && <SegueTab />}
+        {tab === 'headlines' && <Headlines />}
         {tab === 'scorecard' && <Scorecard />}
         {tab === 'rocks' && <Rocks />}
-        {tab === 'headlines' && <Headlines />}
         {tab === 'issues' && <Issues />}
         {tab === 'meeting' && <MeetingTab />}
         {tab === 'team' && <Team />}

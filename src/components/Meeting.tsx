@@ -1,17 +1,10 @@
 import { useState } from 'react'
 import type { Meeting, MeetingRating } from '../types'
-import { today, useApp } from '../store'
-import { EmptyState, usePersonName } from './common'
+import { useApp } from '../store'
+import { defaultSort, sortItems, type SortState } from '../sort'
+import { ConfirmButton, EmptyState, SortSelect, usePersonName } from './common'
 
-const AGENDA: Array<[string, string]> = [
-  ['Segue', '5 min — good news, personal & business'],
-  ['Scorecard', '5 min — on track / off track only'],
-  ['Rock review', '5 min — on track / off track only'],
-  ['Headlines', '5 min — customer & employee news'],
-  ['To-do list', '5 min — done / not done'],
-  ['IDS', '60 min — identify, discuss, solve issues'],
-  ['Conclude', '5 min — recap, cascade, rate 1–10'],
-]
+type MeetingSortField = 'date' | 'avg' | 'attendees'
 
 function ratingFor(
   ratings: MeetingRating[],
@@ -47,15 +40,9 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
         <span className={`avg-pill ${avg == null ? '' : avg >= 8 ? 'good' : avg >= 6 ? 'warn' : 'bad'}`}>
           {avg == null ? 'Not rated' : `Avg ${avg} / 10`}
         </span>
-        <button
-          className="icon-btn danger"
-          title="Delete meeting"
-          onClick={() => {
-            if (confirm('Delete this meeting?')) actions.removeMeeting(meeting.id)
-          }}
-        >
+        <ConfirmButton title="Delete meeting" onConfirm={() => actions.removeMeeting(meeting.id)}>
           ✕
-        </button>
+        </ConfirmButton>
       </header>
 
       <details className="attendee-picker">
@@ -122,11 +109,19 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
 }
 
 export function MeetingTab() {
-  const { data, actions } = useApp()
-  const [attendees, setAttendees] = useState<string[]>([])
+  const { data } = useApp()
+  const [sort, setSort] = useState<SortState<MeetingSortField>>(defaultSort)
 
-  const toggle = (id: string) =>
-    setAttendees((a) => (a.includes(id) ? a.filter((x) => x !== id) : [...a, id]))
+  const meetings = sortItems(data.meetings, sort, (m, field) => {
+    switch (field) {
+      case 'date':
+        return m.date
+      case 'avg':
+        return meetingAverage(m, data.ratings)
+      case 'attendees':
+        return m.attendeeIds.length
+    }
+  })
 
   return (
     <section>
@@ -135,56 +130,25 @@ export function MeetingTab() {
           <h2>Rate the Meeting</h2>
           <p className="hint">
             Every Level 10 Meeting ends with each attendee rating it 1–10. Anything under an 8
-            deserves a conversation about why. The agenda below is the standard 90-minute L10.
+            deserves a conversation about why.
           </p>
         </div>
+        <SortSelect
+          value={sort}
+          onChange={setSort}
+          options={[
+            { value: 'date', label: 'Date' },
+            { value: 'avg', label: 'Average rating' },
+            { value: 'attendees', label: 'Attendees' },
+          ]}
+        />
       </div>
 
-      <ol className="agenda">
-        {AGENDA.map(([name, detail]) => (
-          <li key={name}>
-            <strong>{name}</strong> <span className="meta">{detail}</span>
-          </li>
-        ))}
-      </ol>
-
-      <div className="new-meeting">
-        <h3>Start a meeting</h3>
-        {data.people.length === 0 ? (
-          <EmptyState>Add teammates in the Team tab first.</EmptyState>
-        ) : (
-          <>
-            <div className="attendee-checks">
-              {data.people.map((p) => (
-                <label key={p.id}>
-                  <input
-                    type="checkbox"
-                    checked={attendees.includes(p.id)}
-                    onChange={() => toggle(p.id)}
-                  />
-                  {p.name}
-                </label>
-              ))}
-            </div>
-            <button
-              className="primary"
-              disabled={attendees.length === 0}
-              onClick={() => {
-                actions.addMeeting(today(), attendees)
-                setAttendees([])
-              }}
-            >
-              Create meeting ({attendees.length} attendee{attendees.length === 1 ? '' : 's'})
-            </button>
-          </>
-        )}
-      </div>
-
-      {data.meetings.length === 0 ? (
-        <EmptyState>No meetings recorded yet.</EmptyState>
+      {meetings.length === 0 ? (
+        <EmptyState>No meetings recorded yet — start one on the Start a Meeting tab.</EmptyState>
       ) : (
         <div className="meeting-list">
-          {data.meetings.map((m) => (
+          {meetings.map((m) => (
             <MeetingCard key={m.id} meeting={m} />
           ))}
         </div>

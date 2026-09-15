@@ -15,6 +15,7 @@ export interface Headline {
   authorId: string
   date: string // yyyy-mm-dd
   kind: HeadlineKind
+  done: boolean
 }
 
 export interface Metric {
@@ -29,11 +30,13 @@ export interface Metric {
   entries: Record<string, number>
 }
 
+export type RockStatus = 'on_track' | 'off_track' | 'completed'
+
 export interface Milestone {
   id: string
   name: string
   ownerId: string
-  done: boolean
+  status: RockStatus
   dueDate: string
 }
 
@@ -42,7 +45,7 @@ export interface Rock {
   name: string
   ownerId: string
   dueDate: string
-  completed: boolean
+  status: RockStatus
   /** Empty string = no blocker */
   blocker: string
   milestones: Milestone[]
@@ -55,9 +58,13 @@ export interface Issue {
   name: string
   term: IssueTerm
   raisedById: string
+  /** Context for the discussion — the "Issue Details" column of the L10 sheet. */
+  details: string
   decision: string
   implementerId: string
   solved: boolean
+  /** Set when `solved` turns true, cleared when it turns false. Drives the "solved this week" view. */
+  solvedAt: string
   createdAt: string
 }
 
@@ -80,6 +87,18 @@ export interface MeetingRating {
   score: number // 1-10, 0 = not yet rated
 }
 
+/**
+ * One attendee's Segue statement for one meeting (personal + professional
+ * best). Stored as its own record (id = `${meetingId}~${personId}`) for the
+ * same concurrent-edit-safety reason as MeetingRating.
+ */
+export interface Segue {
+  id: string
+  meetingId: string
+  personId: string
+  text: string
+}
+
 export interface AppData {
   people: Person[]
   headlines: Headline[]
@@ -88,4 +107,5 @@ export interface AppData {
   issues: Issue[]
   meetings: Meeting[]
   ratings: MeetingRating[]
+  segues: Segue[]
 }
