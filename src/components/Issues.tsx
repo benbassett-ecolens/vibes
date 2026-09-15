@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import type { IssueTerm } from '../types'
 import { useApp } from '../store'
-import { EmptyState, PersonSelect } from './common'
+import { defaultSort, sortItems, type SortState } from '../sort'
+import { EmptyState, PersonSelect, SortableHeader, usePersonName } from './common'
 
 const SOLVED_WINDOW_DAYS = 7
+
+type IssueSortField = 'solved' | 'name' | 'term' | 'raisedBy' | 'implementedBy'
 
 function daysSince(dateStr: string): number | null {
   if (!dateStr) return null
@@ -16,11 +19,13 @@ function daysSince(dateStr: string): number | null {
 
 export function Issues() {
   const { data, actions } = useApp()
+  const personName = usePersonName()
   const [name, setName] = useState('')
   const [term, setTerm] = useState<IssueTerm>('short')
   const [raisedById, setRaisedById] = useState('')
   const [filter, setFilter] = useState<'all' | IssueTerm>('all')
   const [showAllSolved, setShowAllSolved] = useState(false)
+  const [sort, setSort] = useState<SortState<IssueSortField>>(defaultSort)
 
   const submit = () => {
     if (!name.trim()) return
@@ -35,12 +40,27 @@ export function Issues() {
     setName('')
   }
 
-  const issues = data.issues.filter((i) => {
+  const filtered = data.issues.filter((i) => {
     if (filter !== 'all' && i.term !== filter) return false
     if (!i.solved) return true
     if (showAllSolved) return true
     const days = daysSince(i.solvedAt)
     return days != null && days <= SOLVED_WINDOW_DAYS
+  })
+
+  const issues = sortItems(filtered, sort, (issue, field) => {
+    switch (field) {
+      case 'solved':
+        return issue.solved
+      case 'name':
+        return issue.name
+      case 'term':
+        return issue.term
+      case 'raisedBy':
+        return personName(issue.raisedById)
+      case 'implementedBy':
+        return personName(issue.implementerId)
+    }
   })
 
   return (
@@ -109,13 +129,23 @@ export function Issues() {
           <table className="issues">
             <thead>
               <tr>
-                <th>Solved</th>
-                <th>Issue</th>
-                <th>Term</th>
-                <th>Raised by</th>
+                <SortableHeader field="solved" sort={sort} onChange={setSort}>
+                  Solved
+                </SortableHeader>
+                <SortableHeader field="name" sort={sort} onChange={setSort}>
+                  Issue
+                </SortableHeader>
+                <SortableHeader field="term" sort={sort} onChange={setSort}>
+                  Term
+                </SortableHeader>
+                <SortableHeader field="raisedBy" sort={sort} onChange={setSort}>
+                  Raised by
+                </SortableHeader>
                 <th>Details</th>
                 <th>Decision</th>
-                <th>Implemented by</th>
+                <SortableHeader field="implementedBy" sort={sort} onChange={setSort}>
+                  Implemented by
+                </SortableHeader>
                 <th></th>
               </tr>
             </thead>

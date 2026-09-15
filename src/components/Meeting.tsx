@@ -1,6 +1,10 @@
+import { useState } from 'react'
 import type { Meeting, MeetingRating } from '../types'
 import { useApp } from '../store'
-import { ConfirmButton, EmptyState, usePersonName } from './common'
+import { defaultSort, sortItems, type SortState } from '../sort'
+import { ConfirmButton, EmptyState, SortSelect, usePersonName } from './common'
+
+type MeetingSortField = 'date' | 'avg' | 'attendees'
 
 function ratingFor(
   ratings: MeetingRating[],
@@ -106,6 +110,18 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
 
 export function MeetingTab() {
   const { data } = useApp()
+  const [sort, setSort] = useState<SortState<MeetingSortField>>(defaultSort)
+
+  const meetings = sortItems(data.meetings, sort, (m, field) => {
+    switch (field) {
+      case 'date':
+        return m.date
+      case 'avg':
+        return meetingAverage(m, data.ratings)
+      case 'attendees':
+        return m.attendeeIds.length
+    }
+  })
 
   return (
     <section>
@@ -117,13 +133,22 @@ export function MeetingTab() {
             deserves a conversation about why.
           </p>
         </div>
+        <SortSelect
+          value={sort}
+          onChange={setSort}
+          options={[
+            { value: 'date', label: 'Date' },
+            { value: 'avg', label: 'Average rating' },
+            { value: 'attendees', label: 'Attendees' },
+          ]}
+        />
       </div>
 
-      {data.meetings.length === 0 ? (
+      {meetings.length === 0 ? (
         <EmptyState>No meetings recorded yet — start one on the Start a Meeting tab.</EmptyState>
       ) : (
         <div className="meeting-list">
-          {data.meetings.map((m) => (
+          {meetings.map((m) => (
             <MeetingCard key={m.id} meeting={m} />
           ))}
         </div>

@@ -9,7 +9,10 @@ import {
   shiftPeriod,
 } from '../periods'
 import { useApp } from '../store'
-import { ConfirmButton, EmptyState, NumberInput, PersonSelect } from './common'
+import { defaultSort, sortItems, type SortState } from '../sort'
+import { ConfirmButton, EmptyState, NumberInput, PersonSelect, SortableHeader, usePersonName } from './common'
+
+type MetricSortField = 'name' | 'owner' | 'goal' | 'cur' | 'prev' | 'avg'
 
 function TrendCell({ metric, cur, prev }: { metric: Metric; cur?: number; prev?: number }) {
   if (cur == null || prev == null) return <span className="trend trend-none">—</span>
@@ -201,10 +204,30 @@ function AddMetricForm({ cadence }: { cadence: Cadence }) {
 
 export function Scorecard() {
   const { data } = useApp()
+  const personName = usePersonName()
   const [cadence, setCadence] = useState<Cadence>('weekly')
-  const metrics = data.metrics.filter((m) => m.cadence === cadence)
-  const curLabel = periodLabel(periodKey(new Date(), cadence), cadence)
-  const prevLabel = periodLabel(shiftPeriod(periodKey(new Date(), cadence), cadence, -1), cadence)
+  const [sort, setSort] = useState<SortState<MetricSortField>>(defaultSort)
+  const filtered = data.metrics.filter((m) => m.cadence === cadence)
+  const curKey = periodKey(new Date(), cadence)
+  const prevKey = shiftPeriod(curKey, cadence, -1)
+  const metrics = sortItems(filtered, sort, (m, field) => {
+    switch (field) {
+      case 'name':
+        return m.name
+      case 'owner':
+        return personName(m.ownerId)
+      case 'goal':
+        return m.goal
+      case 'cur':
+        return m.entries[curKey] ?? null
+      case 'prev':
+        return m.entries[prevKey] ?? null
+      case 'avg':
+        return rolling90DayAverage(m.entries, cadence)
+    }
+  })
+  const curLabel = periodLabel(curKey, cadence)
+  const prevLabel = periodLabel(prevKey, cadence)
 
   return (
     <section>
@@ -240,18 +263,26 @@ export function Scorecard() {
             <thead>
               <tr>
                 <th></th>
-                <th>Measurable</th>
-                <th>Owner</th>
-                <th>Goal</th>
-                <th>
+                <SortableHeader field="name" sort={sort} onChange={setSort}>
+                  Measurable
+                </SortableHeader>
+                <SortableHeader field="owner" sort={sort} onChange={setSort}>
+                  Owner
+                </SortableHeader>
+                <SortableHeader field="goal" sort={sort} onChange={setSort}>
+                  Goal
+                </SortableHeader>
+                <SortableHeader field="cur" sort={sort} onChange={setSort}>
                   This {cadence === 'weekly' ? 'week' : 'month'}
                   <span className="th-sub">{curLabel}</span>
-                </th>
-                <th>
+                </SortableHeader>
+                <SortableHeader field="prev" sort={sort} onChange={setSort}>
                   Last {cadence === 'weekly' ? 'week' : 'month'}
                   <span className="th-sub">{prevLabel}</span>
-                </th>
-                <th>90-day avg</th>
+                </SortableHeader>
+                <SortableHeader field="avg" sort={sort} onChange={setSort}>
+                  90-day avg
+                </SortableHeader>
                 <th>Trend</th>
                 <th></th>
               </tr>

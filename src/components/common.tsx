@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { RockStatus } from '../types'
 import { useApp } from '../store'
+import { type SortState } from '../sort'
 
 const STATUS_LABEL: Record<RockStatus, string> = {
   on_track: 'On Track',
@@ -99,6 +100,78 @@ export function NumberInput({
 
 export function EmptyState({ children }: { children: React.ReactNode }) {
   return <p className="empty-state">{children}</p>
+}
+
+/** Sort control for a card/list view: a field dropdown plus a direction toggle. */
+export function SortSelect<F extends string>({
+  value,
+  onChange,
+  options,
+}: {
+  value: SortState<F>
+  onChange: (next: SortState<F>) => void
+  options: Array<{ value: F; label: string }>
+}) {
+  return (
+    <div className="sort-control">
+      <label>
+        Sort
+        <select
+          value={value.field ?? ''}
+          onChange={(e) => {
+            const field = (e.target.value || null) as F | null
+            onChange({ field, direction: value.direction })
+          }}
+        >
+          <option value="">Default order</option>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        className="icon-btn sort-dir"
+        disabled={!value.field}
+        title={
+          value.direction === 'asc' ? 'Ascending — click for descending' : 'Descending — click for ascending'
+        }
+        onClick={() => onChange({ ...value, direction: value.direction === 'asc' ? 'desc' : 'asc' })}
+      >
+        {value.direction === 'asc' ? '↑' : '↓'}
+      </button>
+    </div>
+  )
+}
+
+/** Clickable table header that sorts by `field` — click again to reverse direction. */
+export function SortableHeader<F extends string>({
+  field,
+  sort,
+  onChange,
+  children,
+}: {
+  field: F
+  sort: SortState<F>
+  onChange: (next: SortState<F>) => void
+  children: ReactNode
+}) {
+  const active = sort.field === field
+  const nextDirection = active && sort.direction === 'asc' ? 'desc' : 'asc'
+  return (
+    <th
+      className="sortable"
+      aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+      onClick={() => onChange({ field, direction: nextDirection })}
+    >
+      <span className="sortable-inner">
+        {children}
+        <span className="sort-arrow">{active ? (sort.direction === 'asc' ? '▲' : '▼') : '↕'}</span>
+      </span>
+    </th>
+  )
 }
 
 /**

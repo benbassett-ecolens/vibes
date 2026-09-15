@@ -1,7 +1,18 @@
 import { useState } from 'react'
-import type { Rock } from '../types'
+import type { Rock, RockStatus } from '../types'
 import { useApp } from '../store'
-import { ConfirmButton, EmptyState, PersonSelect, StatusSelect } from './common'
+import { defaultSort, sortItems, type SortState } from '../sort'
+import { ConfirmButton, EmptyState, PersonSelect, SortSelect, StatusSelect, usePersonName } from './common'
+
+type RockSortField = 'name' | 'owner' | 'dueDate' | 'status' | 'progress'
+
+const STATUS_RANK: Record<RockStatus, number> = { off_track: 0, on_track: 1, completed: 2 }
+
+function rockProgress(rock: Rock): number {
+  const total = rock.milestones.length
+  if (total === 0) return 0
+  return rock.milestones.filter((m) => m.status === 'completed').length / total
+}
 
 function daysUntil(dateStr: string): number | null {
   if (!dateStr) return null
@@ -136,9 +147,11 @@ function RockCard({ rock }: { rock: Rock }) {
 
 export function Rocks() {
   const { data, actions } = useApp()
+  const personName = usePersonName()
   const [name, setName] = useState('')
   const [ownerId, setOwnerId] = useState('')
   const [dueDate, setDueDate] = useState('')
+  const [sort, setSort] = useState<SortState<RockSortField>>(defaultSort)
 
   const submit = () => {
     if (!name.trim()) return
@@ -146,6 +159,21 @@ export function Rocks() {
     setName('')
     setDueDate('')
   }
+
+  const rocks = sortItems(data.rocks, sort, (r, field) => {
+    switch (field) {
+      case 'name':
+        return r.name
+      case 'owner':
+        return personName(r.ownerId)
+      case 'dueDate':
+        return r.dueDate
+      case 'status':
+        return STATUS_RANK[r.status]
+      case 'progress':
+        return rockProgress(r)
+    }
+  })
 
   return (
     <section>
@@ -158,6 +186,17 @@ export function Rocks() {
             track” — off-track Rocks drop to the Issues List.
           </p>
         </div>
+        <SortSelect
+          value={sort}
+          onChange={setSort}
+          options={[
+            { value: 'name', label: 'Name' },
+            { value: 'owner', label: 'Owner' },
+            { value: 'dueDate', label: 'Due date' },
+            { value: 'status', label: 'Status' },
+            { value: 'progress', label: 'Progress' },
+          ]}
+        />
       </div>
 
       <form
@@ -179,11 +218,11 @@ export function Rocks() {
         </button>
       </form>
 
-      {data.rocks.length === 0 ? (
+      {rocks.length === 0 ? (
         <EmptyState>No Rocks yet. Set 3–7 quarterly priorities above.</EmptyState>
       ) : (
         <div className="rock-grid">
-          {data.rocks.map((r) => (
+          {rocks.map((r) => (
             <RockCard key={r.id} rock={r} />
           ))}
         </div>

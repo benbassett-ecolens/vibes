@@ -232,6 +232,62 @@ h3 {
   white-space: nowrap;
 }
 
+/* Sort control (card/list views) */
+.sort-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+}
+
+.sort-control label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.sort-control select {
+  font-size: 13px;
+  padding: 5px 8px;
+}
+
+.sort-dir {
+  font-weight: 700;
+}
+
+.sort-dir:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Sortable table headers */
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+th.sortable:hover {
+  color: var(--text);
+}
+
+.sortable-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sort-arrow {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+th.sortable[aria-sort='ascending'] .sort-arrow,
+th.sortable[aria-sort='descending'] .sort-arrow {
+  color: var(--accent);
+}
+
 .empty-state {
   color: var(--muted);
   background: var(--panel-2);
