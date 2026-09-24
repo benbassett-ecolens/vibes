@@ -361,8 +361,8 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
     removeRock(id: string) {
       setData((d) => ({ ...d, rocks: d.rocks.filter((r) => r.id !== id) }))
     },
-    addMilestone(rockId: string, name: string, ownerId: string) {
-      const milestone: Milestone = { id: uid(), name, ownerId, status: 'on_track', dueDate: '' }
+    addMilestone(rockId: string, name: string, ownerId: string, dueDate = '') {
+      const milestone: Milestone = { id: uid(), name, ownerId, status: 'on_track', dueDate }
       setData((d) => ({
         ...d,
         rocks: d.rocks.map((r) =>

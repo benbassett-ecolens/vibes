@@ -666,14 +666,17 @@ tbody tr:last-child td {
 /* Rocks */
 .rock-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  grid-template-columns: 1fr;
   gap: 14px;
 }
 
-@media (max-width: 500px) {
-  .rock-grid {
-    grid-template-columns: 1fr;
-  }
+.milestones li {
+  flex-wrap: wrap;
+}
+
+.milestones .ms-date {
+  width: auto;
+  flex-shrink: 0;
 }
 
 .rock-card {
