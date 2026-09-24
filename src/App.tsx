@@ -9,6 +9,7 @@ import { Issues } from './components/Issues'
 import { MeetingTab } from './components/Meeting'
 import { Team } from './components/Team'
 import { ConfirmButton } from './components/common'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 const TABS = [
   { id: 'start', label: 'Start a Meeting', icon: '🏁' },
@@ -168,14 +169,16 @@ function Shell() {
       </nav>
 
       <main>
-        {tab === 'start' && <StartMeeting />}
-        {tab === 'segue' && <SegueTab />}
-        {tab === 'headlines' && <Headlines />}
-        {tab === 'scorecard' && <Scorecard />}
-        {tab === 'rocks' && <Rocks />}
-        {tab === 'issues' && <Issues />}
-        {tab === 'meeting' && <MeetingTab />}
-        {tab === 'team' && <Team />}
+        <ErrorBoundary key={tab} label={TABS.find((t) => t.id === tab)?.label ?? 'This tab'}>
+          {tab === 'start' && <StartMeeting />}
+          {tab === 'segue' && <SegueTab />}
+          {tab === 'headlines' && <Headlines />}
+          {tab === 'scorecard' && <Scorecard />}
+          {tab === 'rocks' && <Rocks />}
+          {tab === 'issues' && <Issues />}
+          {tab === 'meeting' && <MeetingTab />}
+          {tab === 'team' && <Team />}
+        </ErrorBoundary>
       </main>
 
       <footer className="app-footer">
@@ -190,8 +193,10 @@ function Shell() {
 
 export default function App() {
   return (
-    <AppProvider>
-      <Shell />
-    </AppProvider>
+    <ErrorBoundary label="Ecolens L10">
+      <AppProvider>
+        <Shell />
+      </AppProvider>
+    </ErrorBoundary>
   )
 }

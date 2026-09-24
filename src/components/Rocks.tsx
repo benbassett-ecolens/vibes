@@ -23,10 +23,30 @@ function daysUntil(dateStr: string): number | null {
   return Math.round((due.getTime() - now.getTime()) / 86_400_000)
 }
 
+/** "Nd left" / "Nd overdue" pill. `quietWhenOk` hides it until the date is within `warnWithin` days. */
+function DueBadge({
+  days,
+  warnWithin,
+  quietWhenOk = false,
+}: {
+  days: number | null
+  warnWithin: number
+  quietWhenOk?: boolean
+}) {
+  if (days == null) return null
+  if (quietWhenOk && days > warnWithin) return null
+  return (
+    <span className={`badge ${days < 0 ? 'badge-bad' : days <= warnWithin ? 'badge-warn' : 'badge-ok'}`}>
+      {days < 0 ? `${-days}d overdue` : `${days}d left`}
+    </span>
+  )
+}
+
 function RockCard({ rock }: { rock: Rock }) {
   const { data, actions } = useApp()
   const [msName, setMsName] = useState('')
   const [msOwnerId, setMsOwnerId] = useState('')
+  const [msDueDate, setMsDueDate] = useState('')
 
   const done = rock.milestones.filter((m) => m.status === 'completed').length
   const total = rock.milestones.length
@@ -35,8 +55,9 @@ function RockCard({ rock }: { rock: Rock }) {
 
   const addMilestone = () => {
     if (!msName.trim()) return
-    actions.addMilestone(rock.id, msName.trim(), msOwnerId || rock.ownerId)
+    actions.addMilestone(rock.id, msName.trim(), msOwnerId || rock.ownerId, msDueDate)
     setMsName('')
+    setMsDueDate('')
   }
 
   return (
@@ -73,11 +94,7 @@ function RockCard({ rock }: { rock: Rock }) {
             onChange={(e) => actions.updateRock(rock.id, { dueDate: e.target.value })}
           />
         </label>
-        {days != null && rock.status !== 'completed' && (
-          <span className={`badge ${days < 0 ? 'badge-bad' : days <= 14 ? 'badge-warn' : 'badge-ok'}`}>
-            {days < 0 ? `${-days}d overdue` : `${days}d left`}
-          </span>
-        )}
+        {rock.status !== 'completed' && <DueBadge days={days} warnWithin={14} />}
       </div>
 
       <label className="blocker">
@@ -113,6 +130,14 @@ function RockCard({ rock }: { rock: Rock }) {
               value={ms.ownerId}
               onChange={(ownerId) => actions.updateMilestone(rock.id, ms.id, { ownerId })}
             />
+            <input
+              type="date"
+              className="ms-date"
+              title="Milestone due date"
+              value={ms.dueDate}
+              onChange={(e) => actions.updateMilestone(rock.id, ms.id, { dueDate: e.target.value })}
+            />
+            {ms.status !== 'completed' && <DueBadge days={daysUntil(ms.dueDate)} warnWithin={7} quietWhenOk />}
             <button
               className="icon-btn danger"
               title="Delete milestone"
@@ -137,6 +162,12 @@ function RockCard({ rock }: { rock: Rock }) {
           placeholder="Add milestone…"
         />
         <PersonSelect value={msOwnerId} onChange={setMsOwnerId} emptyLabel="Owner…" />
+        <input
+          type="date"
+          title="Milestone due date (optional)"
+          value={msDueDate}
+          onChange={(e) => setMsDueDate(e.target.value)}
+        />
         <button type="submit">Add</button>
       </form>
 
