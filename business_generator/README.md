@@ -13,6 +13,14 @@ changes can be reviewed and versioned like anything else in the repo.
 | `ROUTINE_PROMPT.md` | The exact prompt the routine runs. Edit here, then ask Claude to update the routine (or paste it into the routine's settings). |
 | `MEMORY_SEED.md` | The initial content of the "Business Generator Memory" canvas in `#bens-cos` (canvas `F0C4ZNH0D46`). The routine maintains the live canvas itself after this. |
 
+## How it runs
+
+The routine wakes the Claude Code session that built it (the session holds the
+Slack connector; routines that spawn a fresh session get no connectors in this
+workspace and cannot post). Each run reads the memory canvas, researches with
+web search, posts to Slack, and updates the canvas. Nothing is written to the
+repo during a run.
+
 ## Schedule
 
 `CRON_TZ=America/Chicago 57 2 * * 1-5` — Monday to Friday at 2:57am Central
