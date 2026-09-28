@@ -21,6 +21,10 @@ workspace and cannot post). Each run reads the memory canvas, researches with
 web search, posts to Slack, and updates the canvas. Nothing is written to the
 repo during a run.
 
+Routine ID `trig_01GSfVMJ8J9pBAsiqxbmA8YN`, bound to Claude Code session
+`session_014ESx8JmD6MasqSHw7qRaTM`. To pause, resume, or change the schedule,
+ask Claude in that session or use the Routines page on claude.ai.
+
 ## Schedule
 
 `CRON_TZ=America/Chicago 57 2 * * 1-5` — Monday to Friday at 2:57am Central
