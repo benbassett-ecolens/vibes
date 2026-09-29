@@ -826,7 +826,12 @@ tbody tr:last-child td {
 
 .issues th:nth-child(6),
 .issues td:nth-child(6) {
-  width: 48px;
+  width: 108px;
+}
+
+.issue-actions {
+  white-space: nowrap;
+  text-align: right;
 }
 
 /* Selects fill their column instead of spilling into the next one. */

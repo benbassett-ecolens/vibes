@@ -2,7 +2,15 @@ import { useState } from 'react'
 import type { IssueTerm } from '../types'
 import { useApp } from '../store'
 import { defaultSort, sortItems, type SortState } from '../sort'
-import { EmptyState, PersonSelect, SortableHeader, usePersonName } from './common'
+import {
+  ArchiveButton,
+  ArchiveToggle,
+  ConfirmButton,
+  EmptyState,
+  PersonSelect,
+  SortableHeader,
+  usePersonName,
+} from './common'
 
 const SOLVED_WINDOW_DAYS = 7
 
@@ -25,6 +33,7 @@ export function Issues() {
   const [raisedById, setRaisedById] = useState('')
   const [filter, setFilter] = useState<'all' | IssueTerm>('all')
   const [showAllSolved, setShowAllSolved] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const [sort, setSort] = useState<SortState<IssueSortField>>(defaultSort)
 
   const submit = () => {
@@ -40,8 +49,12 @@ export function Issues() {
     setName('')
   }
 
+  const archivedCount = data.issues.filter((i) => i.archivedAt).length
   const filtered = data.issues.filter((i) => {
     if (filter !== 'all' && i.term !== filter) return false
+    // The archive shows every archived issue, solved or not.
+    if (showArchived) return !!i.archivedAt
+    if (i.archivedAt) return false
     if (!i.solved) return true
     if (showAllSolved) return true
     const days = daysSince(i.solvedAt)
@@ -73,7 +86,8 @@ export function Issues() {
             <strong>Discuss</strong> it once, <strong>Solve</strong> it with a decision and one
             person to implement it. Short-term issues get solved in this week's L10; long-term
             issues wait for the quarterly. Issues solved in the last {SOLVED_WINDOW_DAYS} days
-            stay visible so the team can see what got closed out.
+            stay visible so the team can see what got closed out. Archive an issue to take it off
+            the list while keeping it on record.
           </p>
         </div>
         <div className="toggle" role="tablist" aria-label="Issue filter">
@@ -113,17 +127,28 @@ export function Issues() {
         </button>
       </form>
 
-      <label className="show-solved">
-        <input
-          type="checkbox"
-          checked={showAllSolved}
-          onChange={(e) => setShowAllSolved(e.target.checked)}
-        />
-        Show all solved issues (older than {SOLVED_WINDOW_DAYS} days)
-      </label>
+      <ArchiveToggle
+        showArchived={showArchived}
+        onChange={setShowArchived}
+        count={archivedCount}
+        noun="issues"
+      />
+
+      {!showArchived && (
+        <label className="show-solved">
+          <input
+            type="checkbox"
+            checked={showAllSolved}
+            onChange={(e) => setShowAllSolved(e.target.checked)}
+          />
+          Show all solved issues (older than {SOLVED_WINDOW_DAYS} days)
+        </label>
+      )}
 
       {issues.length === 0 ? (
-        <EmptyState>No open issues match this filter. 🎉</EmptyState>
+        <EmptyState>
+          {showArchived ? 'No archived issues yet.' : 'No open issues match this filter. 🎉'}
+        </EmptyState>
       ) : (
         <div className="table-wrap">
           <table className="issues">
@@ -150,7 +175,10 @@ export function Issues() {
             {issues.map((issue) => (
               // One tbody per issue: the issue line, then its details and decision
               // at full width underneath so long text has room.
-              <tbody key={issue.id} className={`issue-group ${issue.solved ? 'row-solved' : ''}`}>
+              <tbody
+                key={issue.id}
+                className={`issue-group ${issue.solved ? 'row-solved' : ''} ${issue.archivedAt ? 'is-archived' : ''}`}
+              >
                 <tr>
                   <td>
                     <input
@@ -190,14 +218,18 @@ export function Issues() {
                       onChange={(implementerId) => actions.updateIssue(issue.id, { implementerId })}
                     />
                   </td>
-                  <td>
-                    <button
-                      className="icon-btn danger"
-                      title="Delete issue"
-                      onClick={() => actions.removeIssue(issue.id)}
+                  <td className="issue-actions">
+                    <ArchiveButton
+                      archived={!!issue.archivedAt}
+                      noun="issue"
+                      onChange={(archived) => actions.setIssueArchived(issue.id, archived)}
+                    />
+                    <ConfirmButton
+                      title="Delete issue permanently"
+                      onConfirm={() => actions.removeIssue(issue.id)}
                     >
                       ✕
-                    </button>
+                    </ConfirmButton>
                   </td>
                 </tr>
                 <tr className="issue-notes-row">
@@ -215,7 +247,10 @@ export function Issues() {
                         />
                       </label>
                       <label>
-                        <span>Decision</span>
+                        <span>
+                          Decision
+                          {issue.archivedAt && ` · archived ${issue.archivedAt}`}
+                        </span>
                         <textarea
                           className="issue-textarea"
                           rows={2}

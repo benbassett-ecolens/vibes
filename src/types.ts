@@ -72,6 +72,8 @@ export interface Issue {
   /** Set when `solved` turns true, cleared when it turns false. Drives the "solved this week" view. */
   solvedAt: string
   createdAt: string
+  /** yyyy-mm-dd when archived; empty string = active. */
+  archivedAt: string
 }
 
 export interface Meeting {

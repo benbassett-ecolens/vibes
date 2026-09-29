@@ -155,6 +155,7 @@ export function seedData(): AppData {
       solved: false,
       solvedAt: '',
       createdAt: today(),
+      archivedAt: '',
     },
     {
       id: uid(),
@@ -167,6 +168,7 @@ export function seedData(): AppData {
       solved: false,
       solvedAt: '',
       createdAt: today(),
+      archivedAt: '',
     },
   ]
 
@@ -233,6 +235,7 @@ export function normalizeData(raw: AppData): AppData {
     // as "solved this week" once, right after migration, rather than
     // disappearing from view entirely.
     solvedAt: i.solvedAt ?? (i.solved ? today() : ''),
+    archivedAt: i.archivedAt ?? '',
   }))
   data.rocks = (raw.rocks ?? []).map((r) => {
     // Keep unknown fields (spread) so fields added by newer versions survive a
@@ -527,11 +530,11 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
     },
 
     // Issues
-    addIssue(issue: Omit<Issue, 'id' | 'createdAt' | 'solved' | 'solvedAt'>) {
+    addIssue(issue: Omit<Issue, 'id' | 'createdAt' | 'solved' | 'solvedAt' | 'archivedAt'>) {
       setData((d) => ({
         ...d,
         issues: [
-          { ...issue, id: uid(), createdAt: today(), solved: false, solvedAt: '' },
+          { ...issue, id: uid(), createdAt: today(), solved: false, solvedAt: '', archivedAt: '' },
           ...d.issues,
         ],
       }))
@@ -547,6 +550,12 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
           if ('solved' in patch) next.solvedAt = patch.solved ? today() : ''
           return next
         }),
+      }))
+    },
+    setIssueArchived(id: string, archived: boolean) {
+      setData((d) => ({
+        ...d,
+        issues: patchList(d.issues, id, { archivedAt: archived ? today() : '' }),
       }))
     },
     removeIssue(id: string) {
