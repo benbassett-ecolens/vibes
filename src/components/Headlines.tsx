@@ -2,7 +2,15 @@ import { useState } from 'react'
 import type { HeadlineKind } from '../types'
 import { today, useApp } from '../store'
 import { defaultSort, sortItems, type SortState } from '../sort'
-import { EmptyState, PersonSelect, SortSelect, usePersonName } from './common'
+import {
+  ArchiveButton,
+  ArchiveToggle,
+  ConfirmButton,
+  EmptyState,
+  PersonSelect,
+  SortSelect,
+  usePersonName,
+} from './common'
 
 const KIND_LABEL: Record<HeadlineKind, string> = {
   customer: 'Customer',
@@ -19,8 +27,11 @@ export function Headlines() {
   const [authorId, setAuthorId] = useState('')
   const [kind, setKind] = useState<HeadlineKind>('general')
   const [sort, setSort] = useState<SortState<HeadlineSortField>>(defaultSort)
+  const [showArchived, setShowArchived] = useState(false)
 
-  const headlines = sortItems(data.headlines, sort, (h, field) => {
+  const archivedCount = data.headlines.filter((h) => h.archivedAt).length
+  const visible = data.headlines.filter((h) => (showArchived ? h.archivedAt : !h.archivedAt))
+  const headlines = sortItems(visible, sort, (h, field) => {
     switch (field) {
       case 'date':
         return h.date
@@ -41,6 +52,7 @@ export function Headlines() {
       date: today(),
       kind,
       done: false,
+      archivedAt: '',
     })
     setText('')
   }
@@ -52,7 +64,8 @@ export function Headlines() {
           <h2>Headlines</h2>
           <p className="hint">
             Quick customer and employee news — good or bad, one line each, no discussion. Anything
-            that needs discussion drops to the Issues List. Check one off once it's been shared.
+            that needs discussion drops to the Issues List. Check one off once it's been shared,
+            and archive it when it no longer needs to show here — archived headlines stay on record.
           </p>
         </div>
         <SortSelect
@@ -90,12 +103,26 @@ export function Headlines() {
         </button>
       </form>
 
+      <ArchiveToggle
+        showArchived={showArchived}
+        onChange={setShowArchived}
+        count={archivedCount}
+        noun="headlines"
+      />
+
       {headlines.length === 0 ? (
-        <EmptyState>No headlines yet. Share customer or employee news above.</EmptyState>
+        <EmptyState>
+          {showArchived
+            ? 'No archived headlines yet.'
+            : 'No headlines yet. Share customer or employee news above.'}
+        </EmptyState>
       ) : (
         <ul className="headline-list">
           {headlines.map((h) => (
-            <li key={h.id} className={`headline ${h.done ? 'headline-done' : ''}`}>
+            <li
+              key={h.id}
+              className={`headline ${h.done ? 'headline-done' : ''} ${h.archivedAt ? 'is-archived' : ''}`}
+            >
               <input
                 type="checkbox"
                 checked={h.done}
@@ -110,14 +137,16 @@ export function Headlines() {
               />
               <span className="meta">
                 {personName(h.authorId)} · {h.date}
+                {h.archivedAt && ` · archived ${h.archivedAt}`}
               </span>
-              <button
-                className="icon-btn danger"
-                title="Delete headline"
-                onClick={() => actions.removeHeadline(h.id)}
-              >
+              <ArchiveButton
+                archived={!!h.archivedAt}
+                noun="headline"
+                onChange={(archived) => actions.setHeadlineArchived(h.id, archived)}
+              />
+              <ConfirmButton title="Delete headline permanently" onConfirm={() => actions.removeHeadline(h.id)}>
                 ✕
-              </button>
+              </ConfirmButton>
             </li>
           ))}
         </ul>

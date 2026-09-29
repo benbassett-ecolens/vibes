@@ -802,49 +802,85 @@ tbody tr:last-child td {
 
 .issues {
   table-layout: fixed;
-  min-width: 1320px;
+  min-width: 720px;
 }
 
 .issues th:nth-child(1),
 .issues td:nth-child(1) {
-  width: 56px;
+  width: 64px;
 }
 
-.issues th:nth-child(2),
-.issues td:nth-child(2) {
-  width: 260px;
-}
+/* Issue name takes whatever width is left. */
 
 .issues th:nth-child(3),
 .issues td:nth-child(3) {
-  width: 90px;
+  width: 104px;
 }
 
 .issues th:nth-child(4),
-.issues td:nth-child(4) {
-  width: 130px;
+.issues td:nth-child(4),
+.issues th:nth-child(5),
+.issues td:nth-child(5) {
+  width: 170px;
 }
 
-.issues th:nth-child(5),
-.issues td:nth-child(5),
 .issues th:nth-child(6),
 .issues td:nth-child(6) {
-  width: 280px;
+  width: 48px;
 }
 
-.issues th:nth-child(7),
-.issues td:nth-child(7) {
-  width: 130px;
+/* Selects fill their column instead of spilling into the next one. */
+.issues select {
+  width: 100%;
+  max-width: 100%;
 }
 
-.issues th:nth-child(8),
-.issues td:nth-child(8) {
-  width: 40px;
+.issues .issue-name {
+  font-weight: 600;
+}
+
+/* Each issue is its own tbody: the issue line, then details + decision underneath. */
+.issues .issue-group td {
+  border-bottom: none;
+}
+
+.issues .issue-group + .issue-group > tr:first-child > td {
+  border-top: 1px solid var(--border);
+}
+
+.issues .issue-notes-row > td {
+  padding-top: 0;
+  padding-bottom: 12px;
+}
+
+.issue-notes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.issue-notes label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.issue-notes label > span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+@media (max-width: 700px) {
+  .issue-notes {
+    grid-template-columns: 1fr;
+  }
 }
 
 .issue-textarea {
   width: 100%;
-  min-height: 48px;
+  min-height: 56px;
   resize: vertical;
   line-height: 1.35;
   white-space: pre-wrap;
@@ -989,4 +1025,83 @@ tbody tr:last-child td {
   color: var(--muted);
   font-size: 12.5px;
   text-align: center;
+}
+
+/* Archiving */
+.text-btn {
+  border: none;
+  background: none;
+  padding: 4px 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+  border-radius: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.text-btn:hover {
+  color: var(--accent);
+  background: var(--panel-2);
+}
+
+.archive-toggle {
+  margin-bottom: 12px;
+}
+
+.is-archived {
+  opacity: 0.72;
+}
+
+.rock-card.is-archived {
+  border-style: dashed;
+}
+
+.archived-note {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.archived-milestones {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.archived-milestones .milestones {
+  align-self: stretch;
+}
+
+/* Scorecard change history */
+.change-history {
+  margin-top: 18px;
+}
+
+.change-history table {
+  min-width: 640px;
+}
+
+.change-history td {
+  vertical-align: top;
+  font-size: 13px;
+}
+
+.change-history .when {
+  white-space: nowrap;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.change-kind {
+  font-weight: 600;
+}
+
+.change-from {
+  color: var(--muted);
+  text-decoration: line-through;
 }

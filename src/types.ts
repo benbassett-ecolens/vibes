@@ -16,6 +16,8 @@ export interface Headline {
   date: string // yyyy-mm-dd
   kind: HeadlineKind
   done: boolean
+  /** yyyy-mm-dd when archived; empty string = active. Archived items are kept as history. */
+  archivedAt: string
 }
 
 export interface Metric {
@@ -38,6 +40,8 @@ export interface Milestone {
   ownerId: string
   status: RockStatus
   dueDate: string
+  /** yyyy-mm-dd when archived; empty string = active. */
+  archivedAt: string
 }
 
 export interface Rock {
@@ -49,6 +53,8 @@ export interface Rock {
   /** Empty string = no blocker */
   blocker: string
   milestones: Milestone[]
+  /** yyyy-mm-dd when archived; empty string = active. */
+  archivedAt: string
 }
 
 export type IssueTerm = 'short' | 'long'
@@ -99,6 +105,29 @@ export interface Segue {
   text: string
 }
 
+/** The parts of a measurable whose edits are recorded in the scorecard change history. */
+export type MetricField = 'name' | 'ownerId' | 'goal' | 'comparator' | 'unit' | 'cadence'
+
+/**
+ * One entry in the scorecard change history: a measurable was added,
+ * removed, or had one of its definition fields edited. Results (entries)
+ * are not logged here. Values are stored as strings; `ownerId` values are
+ * person ids.
+ */
+export interface MetricChange {
+  id: string
+  metricId: string
+  /** The measurable's name when the change was made (kept after it is removed). */
+  metricName: string
+  /** ISO timestamp */
+  at: string
+  kind: 'added' | 'edited' | 'removed'
+  /** Empty for added/removed. */
+  field: MetricField | ''
+  from: string
+  to: string
+}
+
 export interface AppData {
   people: Person[]
   headlines: Headline[]
@@ -108,4 +137,5 @@ export interface AppData {
   meetings: Meeting[]
   ratings: MeetingRating[]
   segues: Segue[]
+  metricChanges: MetricChange[]
 }

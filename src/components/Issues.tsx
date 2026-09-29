@@ -141,17 +141,17 @@ export function Issues() {
                 <SortableHeader field="raisedBy" sort={sort} onChange={setSort}>
                   Raised by
                 </SortableHeader>
-                <th>Details</th>
-                <th>Decision</th>
                 <SortableHeader field="implementedBy" sort={sort} onChange={setSort}>
                   Implemented by
                 </SortableHeader>
                 <th></th>
               </tr>
             </thead>
-            <tbody>
-              {issues.map((issue) => (
-                <tr key={issue.id} className={issue.solved ? 'row-solved' : ''}>
+            {issues.map((issue) => (
+              // One tbody per issue: the issue line, then its details and decision
+              // at full width underneath so long text has room.
+              <tbody key={issue.id} className={`issue-group ${issue.solved ? 'row-solved' : ''}`}>
+                <tr>
                   <td>
                     <input
                       type="checkbox"
@@ -162,7 +162,7 @@ export function Issues() {
                   </td>
                   <td>
                     <input
-                      className={`ghost ${issue.solved ? 'strike' : ''}`}
+                      className={`ghost issue-name ${issue.solved ? 'strike' : ''}`}
                       value={issue.name}
                       onChange={(e) => actions.updateIssue(issue.id, { name: e.target.value })}
                     />
@@ -185,24 +185,6 @@ export function Issues() {
                     />
                   </td>
                   <td>
-                    <textarea
-                      className="issue-textarea"
-                      rows={2}
-                      value={issue.details}
-                      placeholder="Context / details"
-                      onChange={(e) => actions.updateIssue(issue.id, { details: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <textarea
-                      className="issue-textarea"
-                      rows={2}
-                      value={issue.decision}
-                      placeholder="What did we decide?"
-                      onChange={(e) => actions.updateIssue(issue.id, { decision: e.target.value })}
-                    />
-                  </td>
-                  <td>
                     <PersonSelect
                       value={issue.implementerId}
                       onChange={(implementerId) => actions.updateIssue(issue.id, { implementerId })}
@@ -218,8 +200,35 @@ export function Issues() {
                     </button>
                   </td>
                 </tr>
-              ))}
-            </tbody>
+                <tr className="issue-notes-row">
+                  <td></td>
+                  <td colSpan={5}>
+                    <div className="issue-notes">
+                      <label>
+                        <span>Details</span>
+                        <textarea
+                          className="issue-textarea"
+                          rows={2}
+                          value={issue.details}
+                          placeholder="Context / details"
+                          onChange={(e) => actions.updateIssue(issue.id, { details: e.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>Decision</span>
+                        <textarea
+                          className="issue-textarea"
+                          rows={2}
+                          value={issue.decision}
+                          placeholder="What did we decide?"
+                          onChange={(e) => actions.updateIssue(issue.id, { decision: e.target.value })}
+                        />
+                      </label>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            ))}
           </table>
         </div>
       )}

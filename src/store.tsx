@@ -14,6 +14,8 @@ import type {
   Meeting,
   MeetingRating,
   Metric,
+  MetricChange,
+  MetricField,
   Milestone,
   Person,
   Rock,
@@ -42,6 +44,7 @@ export function emptyData(): AppData {
     meetings: [],
     ratings: [],
     segues: [],
+    metricChanges: [],
   }
 }
 
@@ -118,10 +121,11 @@ export function seedData(): AppData {
       dueDate: toISODate(new Date(new Date().setDate(new Date().getDate() + 35))),
       status: 'on_track',
       blocker: '',
+      archivedAt: '',
       milestones: [
-        { id: uid(), name: 'Finalize dashboard spec', ownerId: ben.id, status: 'completed', dueDate: '' },
-        { id: uid(), name: 'Beta with 3 pilot customers', ownerId: sam.id, status: 'on_track', dueDate: '' },
-        { id: uid(), name: 'GA launch + announcement', ownerId: ben.id, status: 'on_track', dueDate: '' },
+        { id: uid(), name: 'Finalize dashboard spec', ownerId: ben.id, status: 'completed', dueDate: '', archivedAt: '' },
+        { id: uid(), name: 'Beta with 3 pilot customers', ownerId: sam.id, status: 'on_track', dueDate: '', archivedAt: '' },
+        { id: uid(), name: 'GA launch + announcement', ownerId: ben.id, status: 'on_track', dueDate: '', archivedAt: '' },
       ],
     },
     {
@@ -131,9 +135,10 @@ export function seedData(): AppData {
       dueDate: toISODate(new Date(new Date().setDate(new Date().getDate() + 50))),
       status: 'off_track',
       blocker: 'Waiting on CRM export access',
+      archivedAt: '',
       milestones: [
-        { id: uid(), name: 'Map current pipeline stages', ownerId: sam.id, status: 'completed', dueDate: '' },
-        { id: uid(), name: 'Write playbook draft', ownerId: riley.id, status: 'on_track', dueDate: '' },
+        { id: uid(), name: 'Map current pipeline stages', ownerId: sam.id, status: 'completed', dueDate: '', archivedAt: '' },
+        { id: uid(), name: 'Write playbook draft', ownerId: riley.id, status: 'on_track', dueDate: '', archivedAt: '' },
       ],
     },
   ]
@@ -173,6 +178,7 @@ export function seedData(): AppData {
       date: today(),
       kind: 'customer',
       done: false,
+      archivedAt: '',
     },
     {
       id: uid(),
@@ -181,6 +187,7 @@ export function seedData(): AppData {
       date: today(),
       kind: 'employee',
       done: false,
+      archivedAt: '',
     },
   ]
 
@@ -193,6 +200,7 @@ export function seedData(): AppData {
     meetings: [],
     ratings: [],
     segues: [],
+    metricChanges: [],
   }
 }
 
@@ -212,7 +220,12 @@ export function normalizeData(raw: AppData): AppData {
   const data: AppData = { ...emptyData(), ...raw }
   data.ratings = Array.isArray(data.ratings) ? data.ratings : []
   data.segues = Array.isArray(data.segues) ? data.segues : []
-  data.headlines = (raw.headlines ?? []).map((h) => ({ ...h, done: h.done ?? false }))
+  data.metricChanges = Array.isArray(data.metricChanges) ? data.metricChanges : []
+  data.headlines = (raw.headlines ?? []).map((h) => ({
+    ...h,
+    done: h.done ?? false,
+    archivedAt: h.archivedAt ?? '',
+  }))
   data.issues = (raw.issues ?? []).map((i) => ({
     ...i,
     details: i.details ?? '',
@@ -222,14 +235,25 @@ export function normalizeData(raw: AppData): AppData {
     solvedAt: i.solvedAt ?? (i.solved ? today() : ''),
   }))
   data.rocks = (raw.rocks ?? []).map((r) => {
-    const legacy = r as Rock & { completed?: boolean }
-    const status: RockStatus = legacy.status ?? (legacy.completed ? 'completed' : 'on_track')
+    // Keep unknown fields (spread) so fields added by newer versions survive a
+    // round trip through an older client; drop only the retired booleans.
+    const { completed, ...rest } = r as Rock & { completed?: boolean }
+    const status: RockStatus = r.status ?? (completed ? 'completed' : 'on_track')
     const milestones = (r.milestones ?? []).map((m) => {
-      const legacyM = m as Milestone & { done?: boolean }
-      const mStatus: RockStatus = legacyM.status ?? (legacyM.done ? 'completed' : 'on_track')
-      return { id: m.id, name: m.name, ownerId: m.ownerId, dueDate: m.dueDate, status: mStatus }
+      const { done, ...mRest } = m as Milestone & { done?: boolean }
+      const mStatus: RockStatus = m.status ?? (done ? 'completed' : 'on_track')
+      return {
+        ...mRest,
+        id: m.id,
+        name: m.name,
+        ownerId: m.ownerId,
+        dueDate: m.dueDate,
+        status: mStatus,
+        archivedAt: m.archivedAt ?? '',
+      }
     })
     return {
+      ...rest,
       id: r.id,
       name: r.name,
       ownerId: r.ownerId,
@@ -237,6 +261,7 @@ export function normalizeData(raw: AppData): AppData {
       blocker: r.blocker ?? '',
       status,
       milestones,
+      archivedAt: r.archivedAt ?? '',
     }
   })
   data.meetings = (raw.meetings ?? []).map((m) => {
@@ -290,6 +315,59 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null)
 
+const METRIC_FIELDS: MetricField[] = ['name', 'ownerId', 'goal', 'comparator', 'unit', 'cadence']
+
+/** Edits to the same field of the same measurable within this window merge into one entry,
+ * so typing a new name letter by letter records one change, not one per keystroke. */
+const MERGE_WINDOW_MS = 10 * 60 * 1000
+
+function metricChange(
+  metricId: string,
+  metricName: string,
+  kind: MetricChange['kind'],
+  field: MetricChange['field'],
+  from: string,
+  to: string,
+): MetricChange {
+  return { id: uid(), metricId, metricName, at: new Date().toISOString(), kind, field, from, to }
+}
+
+/** One-line summary of a measurable's definition, kept on added/removed entries. */
+export function describeMetric(m: Omit<Metric, 'id' | 'entries'>): string {
+  const goal = `${m.comparator === 'gte' ? '≥' : '≤'} ${m.goal}${m.unit ? ` ${m.unit}` : ''}`
+  return `${m.cadence}, goal ${goal}`
+}
+
+/** Record a field edit, folding it into a recent entry for the same field when there is one. */
+export function logMetricEdit(
+  changes: MetricChange[],
+  metric: Metric,
+  field: MetricField,
+  from: string,
+  to: string,
+  now: Date = new Date(),
+): MetricChange[] {
+  const last = [...changes]
+    .reverse()
+    .find((c) => c.metricId === metric.id && c.kind !== 'removed')
+  const mergeable =
+    last &&
+    last.kind === 'edited' &&
+    last.field === field &&
+    now.getTime() - new Date(last.at).getTime() < MERGE_WINDOW_MS
+  if (mergeable) {
+    // Back to where it started: the edit cancelled itself out.
+    if (last.from === to) return changes.filter((c) => c.id !== last.id)
+    return changes.map((c) =>
+      c.id === last.id ? { ...c, to, at: now.toISOString(), metricName: metric.name } : c,
+    )
+  }
+  return [
+    ...changes,
+    { ...metricChange(metric.id, metric.name, 'edited', field, from, to), at: now.toISOString() },
+  ]
+}
+
 function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
   const patchList = <T extends { id: string }>(list: T[], id: string, patch: Partial<T>): T[] =>
     list.map((item) => (item.id === id ? { ...item, ...patch } : item))
@@ -315,19 +393,56 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
     updateHeadline(id: string, patch: Partial<Headline>) {
       setData((d) => ({ ...d, headlines: patchList(d.headlines, id, patch) }))
     },
+    /** Archive (or restore) a headline — it leaves the active list but stays on record. */
+    setHeadlineArchived(id: string, archived: boolean) {
+      setData((d) => ({
+        ...d,
+        headlines: patchList(d.headlines, id, { archivedAt: archived ? today() : '' }),
+      }))
+    },
     removeHeadline(id: string) {
       setData((d) => ({ ...d, headlines: d.headlines.filter((h) => h.id !== id) }))
     },
 
-    // Scorecard metrics
+    // Scorecard metrics — definition edits are recorded in metricChanges
     addMetric(metric: Omit<Metric, 'id' | 'entries'>) {
-      setData((d) => ({ ...d, metrics: [...d.metrics, { ...metric, id: uid(), entries: {} }] }))
+      const id = uid()
+      setData((d) => ({
+        ...d,
+        metrics: [...d.metrics, { ...metric, id, entries: {} }],
+        metricChanges: [
+          ...d.metricChanges,
+          metricChange(id, metric.name, 'added', '', '', describeMetric(metric)),
+        ],
+      }))
     },
     updateMetric(id: string, patch: Partial<Metric>) {
-      setData((d) => ({ ...d, metrics: patchList(d.metrics, id, patch) }))
+      setData((d) => {
+        const before = d.metrics.find((m) => m.id === id)
+        if (!before) return d
+        const after = { ...before, ...patch }
+        let metricChanges = d.metricChanges
+        for (const field of METRIC_FIELDS) {
+          if (!(field in patch) || String(before[field]) === String(after[field])) continue
+          metricChanges = logMetricEdit(metricChanges, after, field, String(before[field]), String(after[field]))
+        }
+        return { ...d, metrics: patchList(d.metrics, id, patch), metricChanges }
+      })
     },
     removeMetric(id: string) {
-      setData((d) => ({ ...d, metrics: d.metrics.filter((m) => m.id !== id) }))
+      setData((d) => {
+        const metric = d.metrics.find((m) => m.id === id)
+        return {
+          ...d,
+          metrics: d.metrics.filter((m) => m.id !== id),
+          metricChanges: metric
+            ? [
+                ...d.metricChanges,
+                metricChange(id, metric.name, 'removed', '', describeMetric(metric), ''),
+              ]
+            : d.metricChanges,
+        }
+      })
     },
     setMetricEntry(id: string, periodKey: string, value: number | null) {
       setData((d) => ({
@@ -352,17 +467,24 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
         status: 'on_track',
         blocker: '',
         milestones: [],
+        archivedAt: '',
       }
       setData((d) => ({ ...d, rocks: [...d.rocks, rock] }))
     },
     updateRock(id: string, patch: Partial<Rock>) {
       setData((d) => ({ ...d, rocks: patchList(d.rocks, id, patch) }))
     },
+    setRockArchived(id: string, archived: boolean) {
+      setData((d) => ({
+        ...d,
+        rocks: patchList(d.rocks, id, { archivedAt: archived ? today() : '' }),
+      }))
+    },
     removeRock(id: string) {
       setData((d) => ({ ...d, rocks: d.rocks.filter((r) => r.id !== id) }))
     },
     addMilestone(rockId: string, name: string, ownerId: string, dueDate = '') {
-      const milestone: Milestone = { id: uid(), name, ownerId, status: 'on_track', dueDate }
+      const milestone: Milestone = { id: uid(), name, ownerId, status: 'on_track', dueDate, archivedAt: '' }
       setData((d) => ({
         ...d,
         rocks: d.rocks.map((r) =>
@@ -375,6 +497,21 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
         ...d,
         rocks: d.rocks.map((r) =>
           r.id === rockId ? { ...r, milestones: patchList(r.milestones, milestoneId, patch) } : r,
+        ),
+      }))
+    },
+    setMilestoneArchived(rockId: string, milestoneId: string, archived: boolean) {
+      setData((d) => ({
+        ...d,
+        rocks: d.rocks.map((r) =>
+          r.id === rockId
+            ? {
+                ...r,
+                milestones: patchList(r.milestones, milestoneId, {
+                  archivedAt: archived ? today() : '',
+                }),
+              }
+            : r,
         ),
       }))
     },

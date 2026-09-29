@@ -225,3 +225,63 @@ export function ConfirmButton({
     </button>
   )
 }
+
+/** Archive / restore toggle. Archiving hides an item from the active view but keeps it on record. */
+export function ArchiveButton({
+  archived,
+  noun,
+  onChange,
+  className = 'text-btn',
+}: {
+  archived: boolean
+  noun: string
+  onChange: (archived: boolean) => void
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      className={className}
+      title={archived ? `Restore this ${noun} to the active list` : `Archive this ${noun} (kept on record)`}
+      onClick={() => onChange(!archived)}
+    >
+      {archived ? 'Restore' : 'Archive'}
+    </button>
+  )
+}
+
+/** "Active / Archived (N)" switch shown above a list that supports archiving. */
+export function ArchiveToggle({
+  showArchived,
+  onChange,
+  count,
+  noun,
+}: {
+  showArchived: boolean
+  onChange: (showArchived: boolean) => void
+  count: number
+  noun: string
+}) {
+  return (
+    <div className="toggle archive-toggle" role="tablist" aria-label={`Active or archived ${noun}`}>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={!showArchived}
+        className={!showArchived ? 'active' : ''}
+        onClick={() => onChange(false)}
+      >
+        Active
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={showArchived}
+        className={showArchived ? 'active' : ''}
+        onClick={() => onChange(true)}
+      >
+        Archived{count > 0 ? ` (${count})` : ''}
+      </button>
+    </div>
+  )
+}

@@ -9,6 +9,7 @@ import {
   shiftPeriod,
 } from '../periods'
 import { useApp } from '../store'
+import { ScorecardHistory } from './ScorecardHistory'
 import { defaultSort, sortItems, type SortState } from '../sort'
 import { ConfirmButton, EmptyState, NumberInput, PersonSelect, SortableHeader, usePersonName } from './common'
 
@@ -237,7 +238,7 @@ export function Scorecard() {
           <p className="hint">
             5–15 measurables with a goal and a single owner. Say each number out loud; anything off
             track drops to the Issues List. Expand a row (▸) to backfill history — the average is a
-            rolling 90-day window.
+            rolling 90-day window. Changes to what is measured are logged in Change history below.
           </p>
         </div>
         <div className="toggle" role="tablist" aria-label="Scorecard cadence">
@@ -297,6 +298,7 @@ export function Scorecard() {
       )}
 
       <AddMetricForm cadence={cadence} />
+      <ScorecardHistory />
     </section>
   )
 }

@@ -32,6 +32,7 @@ const COLLECTIONS = [
   'meetings',
   'ratings',
   'segues',
+  'metricChanges',
 ] as const
 type CollectionName = (typeof COLLECTIONS)[number]
 
