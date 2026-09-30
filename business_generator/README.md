@@ -13,17 +13,24 @@ changes can be reviewed and versioned like anything else in the repo.
 | `ROUTINE_PROMPT.md` | The exact prompt the routine runs. Edit here, then ask Claude to update the routine (or paste it into the routine's settings). |
 | `MEMORY_SEED.md` | The initial content of the "Business Generator Memory" canvas in `#bens-cos` (canvas `F0C4ZNH0D46`). The routine maintains the live canvas itself after this. |
 
+To move the routine to the claude.ai Routines page: New routine → paste the
+full text of `ROUTINE_PROMPT.md` as the prompt → schedule Monday–Friday at
+2:57am America/Chicago → attach the Slack connector → save. Then delete the
+session-bound routine so it does not fire twice.
+
 ## How it runs
 
-The routine wakes the Claude Code session that built it (the session holds the
-Slack connector; routines that spawn a fresh session get no connectors in this
-workspace and cannot post). Each run reads the memory canvas, researches with
-web search, posts to Slack, and updates the canvas. Nothing is written to the
-repo during a run.
+The routine runs on a schedule with the Slack connector attached. Each run
+reads the memory canvas, researches with web search, makes exactly three
+Slack writes (one canvas with the full write-ups, one short companion
+message, one memory-canvas update), and ends. Nothing is written to the repo
+during a run. Three writes means at most three approval prompts if the
+routine runs in an attended session; a routine created from the claude.ai
+Routines page runs unattended and prompts for nothing.
 
-Routine ID `trig_01GSfVMJ8J9pBAsiqxbmA8YN`, bound to Claude Code session
-`session_014ESx8JmD6MasqSHw7qRaTM`. To pause, resume, or change the schedule,
-ask Claude in that session or use the Routines page on claude.ai.
+Routine ID `trig_01GSfVMJ8J9pBAsiqxbmA8YN` (bound to Claude Code session
+`session_014ESx8JmD6MasqSHw7qRaTM`) until it is recreated from the Routines
+page. To pause, resume, or change the schedule, use that page or ask Claude.
 
 ## Schedule
 
@@ -33,31 +40,33 @@ Daylight saving is handled by the time zone in the cron expression.
 
 ## What you get each morning
 
-Three cards in `#bens-cos`, best first. Each card carries the idea, who pays,
-the price, the arithmetic to $100k, the net margin, why it fits in a weekend,
-two demand links, named competitors with prices, the biggest risk, and a score.
-Each card's thread has three replies: the evidence, the Saturday/Sunday plan
-with the first Claude Code prompt to paste, and the budget plus the
+One canvas titled "Weekend Ideas — date" in `#bens-cos` with three ideas,
+best first. Each idea carries who pays, the price, the arithmetic to $100k,
+the net margin, why it fits in a weekend, named competitors with prices, the
+biggest risk, and a score, followed by three sections: the evidence with
+links, the Saturday/Sunday plan with the first Claude Code prompt to paste
+and a setup checklist for every tool, and the budget plus the
 first-ten-customers plan with the actual post text.
 
-A short summary message follows the three cards.
+A short companion message lists the three headlines, links the canvas, says
+what steering was applied, and carries the steering legend.
 
 ## How to steer it
 
-React on a card (only Ben's reactions count):
+React on the companion message (only Ben's reactions count):
 
 | Reaction | Meaning | What the routine does |
 | --- | --- | --- |
-| :+1: | interested | Biases toward that niche and model, posts adjacent angles in the thread |
-| :fire: | build it | Posts a full hour-by-hour Weekend Build Kit in the thread, with every account to create and every Claude Code prompt to paste |
-| :-1: | not this | Avoids it; two thumbs-down on the same model or niche retires it |
-| :question: | tell me more | Deeper evidence and a clearer plan in the thread |
-| :eyes: | go deeper on demand | A demand deep-dive in the thread |
+| 1️⃣ 2️⃣ 3️⃣ | interested in that idea | Biases toward that niche and model |
+| 🔥 | build it | Posts a full hour-by-hour Weekend Build Kit in the thread for idea 1, or for the idea named in a reply such as "build 2" |
+| 👎 | none of these | Avoids all three; two days running on the same model or niche retires it |
+| ❓ | tell me more | Deeper evidence and a clearer plan in the thread next run |
 
-Reply in a card's thread with free text and the routine will honor and answer
-it. Post a top-level message starting with `BG:` for a standing instruction
-(for example `BG: no more Chrome extensions` or `BG: only B2B for the next two
-weeks`). Everything it infers is written to the memory canvas with a date.
+Reply in the companion message's thread with free text ("build 3", "more on
+2", "no more EOS ideas") and the routine will honor and answer it. Post a
+top-level message starting with `BG:` for a standing instruction (for example
+`BG: ignore the variety rule` or `BG: only B2B for two weeks`). Everything it
+infers is written to the memory canvas with a date.
 
 ## Rules the ideas must pass
 
