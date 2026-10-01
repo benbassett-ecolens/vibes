@@ -11,62 +11,52 @@ changes can be reviewed and versioned like anything else in the repo.
 | File | What it is |
 | --- | --- |
 | `ROUTINE_PROMPT.md` | The exact prompt the routine runs. Edit here, then ask Claude to update the routine (or paste it into the routine's settings). |
+| `page/weekend-ideas.html` | Source of the Weekend Ideas page (a Claude artifact with a database). Republish it from Claude to change the page. |
 | `MEMORY_SEED.md` | The initial content of the "Business Generator Memory" canvas in `#bens-cos` (canvas `F0C4ZNH0D46`). The routine maintains the live canvas itself after this. |
-
-To move the routine to the claude.ai Routines page: New routine → paste the
-full text of `ROUTINE_PROMPT.md` as the prompt → schedule Monday–Friday at
-2:57am America/Chicago → attach the Slack connector → save. Then delete the
-session-bound routine so it does not fire twice.
 
 ## How it runs
 
-The routine runs on a schedule with the Slack connector attached. Each run
-reads the memory canvas, researches with web search, makes exactly three
-Slack writes (one canvas with the full write-ups, one short companion
-message, one memory-canvas update), and ends. Nothing is written to the repo
-during a run. Three writes means at most three approval prompts if the
-routine runs in an attended session; a routine created from the claude.ai
-Routines page runs unattended and prompts for nothing.
+The routine wakes a Claude Code session each weekday morning, reads its memory
+and Ben's votes from the Weekend Ideas page's database, researches with web
+search, and writes the day's three ideas and a run record back to that
+database in a single batch. Nothing is posted to Slack or email, and nothing
+is written to the repo during a run.
 
-Routine ID `trig_01GSfVMJ8J9pBAsiqxbmA8YN` (bound to Claude Code session
-`session_014ESx8JmD6MasqSHw7qRaTM`) until it is recreated from the Routines
-page. To pause, resume, or change the schedule, use that page or ask Claude.
+The page: https://claude.ai/artifact/AoqzugAYh7DPGLzPxSr2sY (private; its
+source is `page/weekend-ideas.html` in this folder). Routine ID
+`trig_01GSfVMJ8J9pBAsiqxbmA8YN`, bound to session
+`session_014ESx8JmD6MasqSHw7qRaTM`.
 
 ## Schedule
 
-`CRON_TZ=America/Chicago 57 2 * * 1-5` — Monday to Friday at 2:57am Central
-(a few minutes before 3 so it isn't queued behind the on-the-hour crowd).
+`CRON_TZ=America/Chicago 57 2 * * 1-5` — Monday to Friday at 2:57am Central.
 Daylight saving is handled by the time zone in the cron expression.
 
 ## What you get each morning
 
-One canvas titled "Weekend Ideas — date" in `#bens-cos` with three ideas,
-best first. Each idea carries who pays, the price, the arithmetic to $100k,
-the net margin, why it fits in a weekend, named competitors with prices, the
-biggest risk, and a score, followed by three sections: the evidence with
-links, the Saturday/Sunday plan with the first Claude Code prompt to paste
-and a setup checklist for every tool, and the budget plus the
-first-ten-customers plan with the actual post text.
-
-A short companion message lists the three headlines, links the canvas, says
-what steering was applied, and carries the steering legend.
+The page shows the latest run on top: three ideas, best first, each with who
+pays, the price, the arithmetic to $100k, the net margin, why it fits in a
+weekend, named competitors with prices, the biggest risk, and a score, plus
+three expandable sections: the evidence with links, the Saturday/Sunday plan
+with the first Claude Code prompt to paste and a setup checklist for every
+tool, and the budget plus the first-ten-customers plan with the actual post
+text. Earlier days are one click away, and a table at the bottom lists every
+idea ever proposed with your call on it.
 
 ## How to steer it
 
-React on the companion message (only Ben's reactions count):
+On any idea, click one button. Only the owner's clicks count.
 
-| Reaction | Meaning | What the routine does |
-| --- | --- | --- |
-| 1️⃣ 2️⃣ 3️⃣ | interested in that idea | Biases toward that niche and model |
-| 🔥 | build it | Posts a full hour-by-hour Weekend Build Kit in the thread for idea 1, or for the idea named in a reply such as "build 2" |
-| 👎 | none of these | Avoids all three; two days running on the same model or niche retires it |
-| ❓ | tell me more | Deeper evidence and a clearer plan in the thread next run |
+| Button | What the routine does next run |
+| --- | --- |
+| Interested | Biases toward that niche and model |
+| Build it | Writes a full hour-by-hour Weekend Build Kit into that idea, with every account to create and every Claude Code prompt to paste |
+| Not this | Avoids it; two rejections on the same niche or model retire it |
+| Tell me more | Writes a follow-up into that idea with deeper evidence and a clearer plan |
 
-Reply in the companion message's thread with free text ("build 3", "more on
-2", "no more EOS ideas") and the routine will honor and answer it. Post a
-top-level message starting with `BG:` for a standing instruction (for example
-`BG: ignore the variety rule` or `BG: only B2B for two weeks`). Everything it
-infers is written to the memory canvas with a date.
+Type anything into an idea's note box and the routine reads it. The
+"Standing instructions" box at the bottom of the page holds rules applied
+every run, such as "ignore the variety rule" or "only B2B for two weeks".
 
 ## Rules the ideas must pass
 
