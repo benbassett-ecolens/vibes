@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root { --bg:#fff; --fg:#1d1f23; --muted:#6b7280; --line:#e5e7eb; --card:#f8f9fb; --accent:#2f6f4e; --neg:#b42318; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16181c; --fg:#e8eaed; --muted:#9aa0a6; --line:#2b2f36; --card:#1e2127; --accent:#6fcf97; --neg:#f97066; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:20px 16px 40px; background:var(--bg); color:var(--fg);
+         font:15px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  main { max-width:760px; margin:0 auto; }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; justify-content:space-between; margin-bottom:20px; }
+  h1 { font-size:20px; margin:0 0 2px; }
+  .sub { color:var(--muted); font-size:13px; }
+  .controls { display:flex; gap:10px; flex-wrap:wrap; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:3px; }
+  select { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg); }
+  .total { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:18px; }
+  .total .amt { font-size:32px; font-weight:650; color:var(--accent); font-variant-numeric:tabular-nums; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th, td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:right; }
+  th:first-child, td:first-child { text-align:left; }
+  th { font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+  tfoot td { font-weight:650; border-bottom:none; }
+  .neg { color:var(--neg); }
+  .note, .msg { color:var(--muted); font-size:13px; margin-top:14px; }
+  .err { color:var(--neg); }
+  .tablewrap { overflow-x:auto; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1 id="title">My payout</h1>
+      <div class="sub" id="sub"></div>
+    </div>
+    <div class="controls">
+      <div id="asWrap" hidden><label for="as">View as (admin)</label><select id="as"></select></div>
+      <div><label for="period">Pay period</label><select id="period"></select></div>
+    </div>
+  </header>
+
+  <div id="status" class="msg">Loading…</div>
+  <div id="content" hidden>
+    <div class="total"><div class="sub">Total payout</div><div class="amt" id="total"></div></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Client</th><th>Revenue basis</th><th>Your %</th><th>Payout</th></tr></thead>
+        <tbody id="rows"></tbody>
+        <tfoot><tr><td colspan="3">Total</td><td id="foot"></td></tr></tfoot>
+      </table>
+    </div>
+    <div class="note">Payout = revenue basis × your %. Questions about a number? Contact Ben.</div>
+  </div>
+</main>
+
+<script>
+  var money = new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:0 });
+  var money2 = new Intl.NumberFormat('en-US', { style:'currency', currency:'USD' });
+  function fmt(n) { return (n % 1 === 0 ? money : money2).format(n); }
+  function $(id) { return document.getElementById(id); }
+
+  function setStatus(text, isErr) {
+    var s = $('status'); s.textContent = text; s.className = isErr ? 'msg err' : 'msg'; s.hidden = !text;
+  }
+  function fail(e) { $('content').hidden = true; setStatus((e && e.message) || String(e), true); }
+
+  function cell(tr, text, cls) {
+    var td = document.createElement('td'); td.textContent = text; if (cls) td.className = cls; tr.appendChild(td); return td;
+  }
+
+  function periodLabel(iso) {
+    var p = iso.split('-');
+    return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric', timeZone:'UTC' });
+  }
+
+  function load() {
+    var period = $('period').value;
+    if (!period) { fail(new Error('No pay periods available yet.')); return; }
+    setStatus('Loading…');
+    var as = $('asWrap').hidden ? null : $('as').value;
+    google.script.run.withFailureHandler(fail).withSuccessHandler(render).getStatement(period, as);
+  }
+
+  function render(st) {
+    setStatus('');
+    $('content').hidden = false;
+    $('title').textContent = st.person + "'s payout";
+    $('total').textContent = fmt(st.total);
+    $('total').className = 'amt' + (st.total < 0 ? ' neg' : '');
+    var body = $('rows'); body.textContent = '';
+    st.lines.forEach(function (l) {
+      var tr = document.createElement('tr');
+      cell(tr, l.client);
+      cell(tr, l.basis ? fmt(l.basis) : '—');
+      cell(tr, (Math.round(l.pct * 1000) / 10) + '%');
+      cell(tr, fmt(l.payout), l.payout < 0 ? 'neg' : '');
+      body.appendChild(tr);
+    });
+    if (st.other) {
+      var tr = document.createElement('tr');
+      cell(tr, 'Other / adjustments'); cell(tr, ''); cell(tr, '');
+      cell(tr, fmt(st.other), st.other < 0 ? 'neg' : '');
+      body.appendChild(tr);
+    }
+    if (!st.lines.length && !st.other) {
+      var e = document.createElement('tr'); var td = cell(e, 'No payout lines for this period.'); td.colSpan = 4; body.appendChild(e);
+    }
+    $('foot').textContent = fmt(st.total);
+  }
+
+  google.script.run.withFailureHandler(fail).withSuccessHandler(function (b) {
+    $('sub').textContent = 'Signed in as ' + b.viewer.name;
+    var ps = $('period');
+    b.periods.forEach(function (p) {
+      var o = document.createElement('option'); o.value = p.name; o.textContent = periodLabel(p.date); ps.appendChild(o);
+    });
+    if (b.viewer.isAdmin) {
+      $('asWrap').hidden = false;
+      b.people.forEach(function (n) {
+        var o = document.createElement('option'); o.value = n; o.textContent = n;
+        if (n === b.viewer.name) o.selected = true;
+        $('as').appendChild(o);
+      });
+      $('as').addEventListener('change', load);
+    }
+    ps.addEventListener('change', load);
+    load();
+  }).getBootstrap();
+</script>
+</body>
+</html>
