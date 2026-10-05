@@ -29,6 +29,14 @@
   .note, .msg { color:var(--muted); font-size:13px; margin-top:14px; }
   .err { color:var(--neg); }
   .tablewrap { overflow-x:auto; }
+  h2 { font-size:17px; margin:34px 0 12px; }
+  .tiles { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:14px; }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .tile .amt { font-size:22px; font-weight:650; font-variant-numeric:tabular-nums; }
+  .tile .amt.owed { color:var(--accent); }
+  tr.month td { background:var(--card); font-weight:600; text-align:left; font-size:13px; }
+  .status-owed { font-weight:600; }
+  .status-paid { color:var(--muted); }
 </style>
 </head>
 <body>
@@ -56,6 +64,22 @@
     </div>
     <div class="note">Payout = revenue basis × your %. Questions about a number? Contact Ben.</div>
   </div>
+
+  <section id="ai" hidden>
+    <h2>AI line</h2>
+    <div class="tiles">
+      <div class="tile"><div class="sub">Earned</div><div class="amt" id="aiEarned"></div></div>
+      <div class="tile"><div class="sub">Paid</div><div class="amt" id="aiPaid"></div></div>
+      <div class="tile"><div class="sub">Still owed</div><div class="amt owed" id="aiOwed"></div></div>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Customer</th><th>Revenue basis</th><th>Your %</th><th>Amount</th><th>Status</th></tr></thead>
+        <tbody id="aiRows"></tbody>
+      </table>
+    </div>
+  </section>
+  <div id="aiMsg" class="msg err" hidden></div>
 </main>
 
 <script>
@@ -78,12 +102,51 @@
     return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric', timeZone:'UTC' });
   }
 
-  function load() {
+  function viewAs() { return $('asWrap').hidden ? null : $('as').value; }
+
+  function load() { loadRetainer(); loadAi(); }
+
+  function loadRetainer() {
     var period = $('period').value;
-    if (!period) { fail(new Error('No pay periods available yet.')); return; }
+    if (!period) { fail(new Error('No retainer pay periods available yet.')); return; }
     setStatus('Loading…');
-    var as = $('asWrap').hidden ? null : $('as').value;
-    google.script.run.withFailureHandler(fail).withSuccessHandler(render).getStatement(period, as);
+    google.script.run.withFailureHandler(fail).withSuccessHandler(render).getStatement(period, viewAs());
+  }
+
+  function loadAi() {
+    $('aiMsg').hidden = true;
+    google.script.run.withFailureHandler(function (e) {
+      $('ai').hidden = true; $('aiMsg').textContent = 'AI line: ' + ((e && e.message) || e); $('aiMsg').hidden = false;
+    }).withSuccessHandler(renderAi).getAiStatement(viewAs());
+  }
+
+  function monthLabel(m) {
+    if (!/^\d{4}-\d{2}$/.test(m)) return m;
+    var p = m.split('-');
+    return new Date(Date.UTC(+p[0], +p[1] - 1, 1)).toLocaleDateString('en-US', { year:'numeric', month:'long', timeZone:'UTC' });
+  }
+
+  function renderAi(st) {
+    var body = $('aiRows'); body.textContent = '';
+    if (!st || !st.enabled || !st.months.length) { $('ai').hidden = true; return; }
+    $('ai').hidden = false;
+    $('aiEarned').textContent = fmt(st.earned);
+    $('aiPaid').textContent = fmt(st.paid);
+    $('aiOwed').textContent = fmt(st.owed);
+    st.months.forEach(function (m) {
+      var h = document.createElement('tr'); h.className = 'month';
+      var td = cell(h, monthLabel(m.month) + '  ·  earned ' + fmt(m.earned) + '  ·  paid ' + fmt(m.paid) + '  ·  owed ' + fmt(m.owed));
+      td.colSpan = 5; body.appendChild(h);
+      m.lines.forEach(function (l) {
+        var tr = document.createElement('tr');
+        cell(tr, l.type ? l.customer + ' — ' + l.type : l.customer);
+        cell(tr, l.basis ? fmt(l.basis) : '—');
+        cell(tr, l.pct ? (Math.round(l.pct * 1000) / 10) + '%' : '—');
+        cell(tr, fmt(l.amount), l.amount < 0 ? 'neg' : '');
+        cell(tr, l.status === 'paid' ? (l.paidDate ? 'Paid ' + l.paidDate : 'Paid') : 'Owed', 'status-' + l.status);
+        body.appendChild(tr);
+      });
+    });
   }
 
   function render(st) {

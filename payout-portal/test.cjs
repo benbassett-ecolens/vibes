@@ -3,7 +3,7 @@ const fs = require('fs');
 const vm = require('vm');
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(__dirname + '/Code.gs', 'utf8') + '\nthis.parsePeriod_ = parsePeriod_;', ctx);
+vm.runInContext(fs.readFileSync(__dirname + '/Code.gs', 'utf8') + '\nthis.parsePeriod_ = parsePeriod_; this.parseLedger_ = parseLedger_;', ctx);
 const assert = require('assert');
 
 const R = (a, b, c, d) => [a, b, c, d, '', '', '', '', '', '', '', '', ''];
@@ -50,5 +50,28 @@ assert.strictEqual(b.total, 500);
 assert.strictEqual(b.other, 500);
 
 let c = ctx.parsePeriod_(grid, 'Chris');
-assert.deepStrictEqual([c.lines.length, c.total], [0, 0]);
+assert.strictEqual(JSON.stringify([c.lines.length, c.total]), '[0,0]');
+// Team tab may hold full names while payout tabs use first names
+assert.strictEqual(ctx.parsePeriod_(grid, 'David Gersten').total, 2500);
+assert.strictEqual(ctx.parsePeriod_(grid, 'David Gersten').lines.length, 3);
+
+// AI ledger
+const ledger = [
+  ['Date', 'Customer', 'Revenue type', 'Person', 'Basis', '%', 'Amount', 'Status', 'Paid date'],
+  ['2026-10-15', 'Acme', 'Build out fee', 'Elevome', 1000, 0.4, 400, 'Owed', ''],
+  ['2026-10-15', 'Acme', 'Build out fee', 'David Gersten', 1000, 0.1, 100, 'Paid', '2026-11-01'],
+  ['2026-10-15', 'Acme', 'Build out fee', 'Ben Bassett', 1000, 0.25, 250, 'Owed', ''],
+  [new Date(Date.UTC(2026, 10, 20)), 'Acme', 'License', 'David', 2000, 0.1, 200, 'Owed', ''],
+  ['2026-11-20', 'Beta', 'License', 'David', 500, 0.1, 0, 'Owed', ''],
+];
+const fmtDate = (d) => d.toISOString().slice(0, 10);
+let l = ctx.parseLedger_(ledger, 'David Gersten', fmtDate);
+assert.strictEqual(JSON.stringify([l.earned, l.paid, l.owed]), '[300,100,200]');
+assert.strictEqual(JSON.stringify(l.months.map((x) => x.month)), '["2026-11","2026-10"]');   // newest first
+assert.strictEqual(l.months[0].lines[0].date, '2026-11-20');                     // Date cells formatted
+assert.strictEqual(l.months[1].lines[0].paidDate, '2026-11-01');
+let bl = ctx.parseLedger_(ledger, 'Ben Bassett', fmtDate);
+assert.strictEqual(JSON.stringify([bl.earned, bl.paid, bl.owed]), '[250,0,250]');
+assert.strictEqual(ctx.parseLedger_(ledger, 'Naomi Marti', fmtDate).months.length, 0);
+assert.throws(() => ctx.parseLedger_([['Date', 'Person']], 'X', fmtDate));
 console.log('ok');

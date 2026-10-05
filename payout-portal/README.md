@@ -41,3 +41,14 @@ the period picker automatically. Tabs like "Ben version ..." and "AI Lab payout 
 
 - The `AI Lab payout` tab (different layout with owed/paid columns).
 - Blocks with no `Client - Retainer` label show as "Unnamed client N" once they have a payout.
+
+## AI Ledger (AI line of business)
+
+Add a tab named `AI Ledger` with this header row (order does not matter, names must match):
+
+`Date | Customer | Revenue type | Person | Basis | % | Amount | Status | Paid date`
+
+One row per payout line, e.g. `2026-10-15 | Acme | Build out fee | David Gersten | 900 | 10% | =ROUND(E2*F2,2) | Paid | 2026-11-01`.
+Status `Paid` counts as paid; anything else counts as owed. Rows for people not on the Team tab
+(e.g. Elevome) are never shown to anyone. New months are just new rows. Rows are grouped by the
+month of `Date`, newest first, with earned / paid / owed totals.

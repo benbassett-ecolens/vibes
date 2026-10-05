@@ -14,6 +14,7 @@ const PERIOD_TAB_PATTERN = /^\d{8} Retainer\/variable payout$/; // e.g. "2026101
 const HEADER_ROW = 1;                          // row holding person names in the right-hand summary
 const TOTALS_ROW = 2;                          // row holding each person's total payout
 const SUMMARY_FIRST_COL = 6;                   // column F (1-based) where person columns start
+const LEDGER_TAB = 'AI Ledger';                // running AI-line ledger (see README)
 
 // ---- Web app entry ---------------------------------------------------------
 function doGet() {
@@ -44,6 +45,17 @@ function getStatement(periodName, asName) {
   statement.person = ctx.target.name;
   statement.period = periodName;
   return statement;
+}
+
+function getAiStatement(asName) {
+  const ctx = resolveViewer_(asName);
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName(LEDGER_TAB);
+  if (!sheet) return { enabled: false, months: [] };
+  const tz = ss.getSpreadsheetTimeZone();
+  return parseLedger_(sheet.getDataRange().getValues(), ctx.target.name, function (d) {
+    return Utilities.formatDate(d, tz, 'yyyy-MM-dd');
+  });
 }
 
 // ---- Identity --------------------------------------------------------------
@@ -92,6 +104,12 @@ function num_(v) {
 
 function round2_(n) { return Math.round(n * 100) / 100; }
 
+// Tabs use first names ("David"), the Team tab may use full names ("David Gersten"): accept either.
+function aliases_(name) {
+  const full = String(name).trim().toLowerCase();
+  return [full, full.split(/\s+/)[0]];
+}
+
 /**
  * values: 2D array from the period tab. Blocks look like:
  *   "<Client> - Retainer" | retainer fee
@@ -100,7 +118,7 @@ function round2_(n) { return Math.round(n * 100) / 100; }
  *   (blank row ends the block)
  */
 function parsePeriod_(values, personName) {
-  const want = personName.toLowerCase();
+  const want = aliases_(personName);
   const lines = [];
   let block = null;
   let unnamed = 0;
@@ -116,7 +134,7 @@ function parsePeriod_(values, personName) {
     } else if (/^variable$/i.test(label)) {
       if (!block) block = { client: 'Unnamed client ' + (++unnamed), basis: 0 };
       block.basis += num_(row[1]);
-    } else if (block && label.toLowerCase() === want) {
+    } else if (block && want.indexOf(label.toLowerCase()) !== -1) {
       const payout = num_(row[3]);
       if (payout !== 0) {
         lines.push({ client: block.client, basis: round2_(block.basis), pct: num_(row[2]), payout: round2_(payout) });
@@ -131,9 +149,59 @@ function parsePeriod_(values, personName) {
   const header = values[HEADER_ROW - 1] || [];
   const totals = values[TOTALS_ROW - 1] || [];
   for (let c = SUMMARY_FIRST_COL - 1; c < header.length; c++) {
-    if (String(header[c]).trim().toLowerCase() === want) { total = round2_(num_(totals[c])); break; }
+    if (want.indexOf(String(header[c]).trim().toLowerCase()) !== -1) { total = round2_(num_(totals[c])); break; }
   }
   if (total === null) total = blockTotal;
 
   return { lines: lines, blockTotal: blockTotal, other: round2_(total - blockTotal), total: total };
+}
+
+/**
+ * AI Ledger tab: one row per payout line. Columns are found by header name:
+ *   Date | Customer | Revenue type | Person | Basis | % | Amount | Status | Paid date
+ * Status "Paid" counts as paid; anything else counts as owed.
+ */
+function parseLedger_(values, personName, fmtDate) {
+  const empty = { enabled: true, earned: 0, paid: 0, owed: 0, months: [] };
+  if (!values.length) return empty;
+  const head = values[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  const col = {
+    date: head.indexOf('date'), customer: head.indexOf('customer'), type: head.indexOf('revenue type'),
+    person: head.indexOf('person'), basis: head.indexOf('basis'), pct: head.indexOf('%'),
+    amount: head.indexOf('amount'), status: head.indexOf('status'), paidDate: head.indexOf('paid date'),
+  };
+  if (col.person < 0 || col.amount < 0 || col.status < 0) {
+    throw new Error('AI Ledger needs Person, Amount and Status columns.');
+  }
+  const want = aliases_(personName);
+  const get = function (row, i) { return i < 0 ? '' : row[i]; };
+  const dateStr = function (v) { return Object.prototype.toString.call(v) === '[object Date]' ? fmtDate(v) : String(v || '').trim(); };
+
+  const byMonth = {};
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    if (want.indexOf(String(get(row, col.person)).trim().toLowerCase()) === -1) continue;
+    const amount = round2_(num_(get(row, col.amount)));
+    if (amount === 0) continue;
+    const date = dateStr(get(row, col.date));
+    const month = /^\d{4}-\d{2}/.test(date) ? date.slice(0, 7) : 'Undated';
+    const paid = String(get(row, col.status)).trim().toLowerCase() === 'paid';
+    const m = byMonth[month] || (byMonth[month] = { month: month, earned: 0, paid: 0, owed: 0, lines: [] });
+    m.lines.push({
+      date: date,
+      customer: String(get(row, col.customer)).trim(),
+      type: String(get(row, col.type)).trim(),
+      basis: round2_(num_(get(row, col.basis))),
+      pct: num_(get(row, col.pct)),
+      amount: amount,
+      status: paid ? 'paid' : 'owed',
+      paidDate: dateStr(get(row, col.paidDate)),
+    });
+    m.earned = round2_(m.earned + amount);
+    if (paid) m.paid = round2_(m.paid + amount); else m.owed = round2_(m.owed + amount);
+  }
+
+  const months = Object.keys(byMonth).sort().reverse().map(function (k) { return byMonth[k]; });
+  const sum = function (f) { return round2_(months.reduce(function (s, m) { return s + m[f]; }, 0)); };
+  return { enabled: true, earned: sum('earned'), paid: sum('paid'), owed: sum('owed'), months: months };
 }
