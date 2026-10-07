@@ -3,7 +3,7 @@ const fs = require('fs');
 const vm = require('vm');
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(__dirname + '/Code.gs', 'utf8') + '\nthis.parsePeriod_ = parsePeriod_; this.parseLedger_ = parseLedger_;', ctx);
+vm.runInContext(fs.readFileSync(__dirname + '/Code.gs', 'utf8') + '\nthis.parsePeriod_ = parsePeriod_; this.parseLedger_ = parseLedger_; this.parseClients_ = parseClients_;', ctx);
 const assert = require('assert');
 
 const R = (a, b, c, d) => [a, b, c, d, '', '', '', '', '', '', '', '', ''];
@@ -74,4 +74,19 @@ let bl = ctx.parseLedger_(ledger, 'Ben Bassett', fmtDate);
 assert.strictEqual(JSON.stringify([bl.earned, bl.paid, bl.owed]), '[250,0,250]');
 assert.strictEqual(ctx.parseLedger_(ledger, 'Naomi Marti', fmtDate).months.length, 0);
 assert.throws(() => ctx.parseLedger_([['Date', 'Person']], 'X', fmtDate));
+// owed lines sort ahead of paid lines within a month
+ledger.push(['2026-10-01', 'Z', '', 'Zed', 100, 0.1, 10, 'Paid', '2026-10-02']);
+ledger.push(['2026-10-02', 'Z', '', 'Zed', 100, 0.1, 20, 'Owed', '']);
+const z = ctx.parseLedger_(ledger, 'Zed', fmtDate);
+assert.strictEqual(JSON.stringify(z.months[0].lines.map((x) => x.status)), '["owed","paid"]');
+
+// Client revenue sidebar: one retainer + one variable amount per client
+let cm = ctx.parseClients_(grid, 'Max Robbins', false);          // Max is only on Alpha
+assert.strictEqual(cm.lines.length, 1);
+assert.strictEqual(JSON.stringify([cm.lines[0].client, cm.lines[0].retainer, cm.lines[0].variable, cm.lines[0].total]), '["Alpha",10000,1000,11000]');
+assert.strictEqual(ctx.parseClients_(grid, 'Ben Bassett', false).lines.length, 0);   // Ben is in no block
+let ca = ctx.parseClients_(grid, 'Ben Bassett', true);            // admin view: everything with revenue
+assert.strictEqual(JSON.stringify(ca.lines.map((x) => x.client)), '["Alpha","Beta","Gamma"]');  // unnamed $0 block skipped
+assert.strictEqual(ca.total, 19000);
+assert.strictEqual(ca.scope, 'all');
 console.log('ok');

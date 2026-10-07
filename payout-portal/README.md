@@ -52,3 +52,13 @@ One row per payout line, e.g. `2026-10-15 | Acme | Build out fee | David Gersten
 Status `Paid` counts as paid; anything else counts as owed. Rows for people not on the Team tab
 (e.g. Elevome) are never shown to anyone. New months are just new rows. Rows are grouped by the
 month of `Date`, newest first, with earned / paid / owed totals.
+
+## Sidebar: client revenue
+
+The sidebar lists, for the selected pay period, column B of each `<Client> - Retainer` block: one
+**Retainer** line and one **Variable** line per client (Variable is the sum of the block's `Variable`
+rows). Clients with no revenue in either are hidden.
+
+`CLIENT_PANEL_SCOPE` in `Code.gs` controls who sees what: `'mine'` (default) shows each teammate only
+the clients they have a row in; `'all'` shows every client to everyone. Admins viewing their own page
+always see all clients, and "View as" shows exactly what that teammate sees.

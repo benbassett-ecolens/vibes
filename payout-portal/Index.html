@@ -3,106 +3,201 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  :root { --bg:#fff; --fg:#1d1f23; --muted:#6b7280; --line:#e5e7eb; --card:#f8f9fb; --accent:#2f6f4e; --neg:#b42318; }
+  :root {
+    --bg:#ffffff; --fg:#1d1f23; --muted:#6b7280; --line:#e5e7eb; --card:#f8f9fb; --head:#f1f3f6;
+    --neg:#b42318;
+    --paid-bg:#e3f3e8; --paid-fg:#1b6a39;
+    --owed-bg:#fff0cc; --owed-fg:#7a4f00;
+  }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#16181c; --fg:#e8eaed; --muted:#9aa0a6; --line:#2b2f36; --card:#1e2127; --accent:#6fcf97; --neg:#f97066; }
+    :root {
+      --bg:#16181c; --fg:#e8eaed; --muted:#9aa0a6; --line:#2b2f36; --card:#1e2127; --head:#252932;
+      --neg:#f97066;
+      --paid-bg:#1b3a29; --paid-fg:#8be0a8;
+      --owed-bg:#43330f; --owed-fg:#f7cc70;
+    }
   }
   * { box-sizing: border-box; }
   body { margin:0; padding:20px 16px 40px; background:var(--bg); color:var(--fg);
          font:15px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-  main { max-width:760px; margin:0 auto; }
-  header { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; justify-content:space-between; margin-bottom:20px; }
-  h1 { font-size:20px; margin:0 0 2px; }
+  .layout { max-width:1040px; margin:0 auto; display:grid; grid-template-columns:1fr; gap:20px; }
+  @media (min-width: 860px) {
+    .layout { grid-template-columns:260px minmax(0, 1fr); gap:28px; align-items:start; }
+    .side { position:sticky; top:16px; }
+  }
+
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  select { font:inherit; width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); }
   .sub { color:var(--muted); font-size:13px; }
-  .controls { display:flex; gap:10px; flex-wrap:wrap; }
-  label { display:block; font-size:12px; color:var(--muted); margin-bottom:3px; }
-  select { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--fg); }
-  .total { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:18px; }
-  .total .amt { font-size:32px; font-weight:650; color:var(--accent); font-variant-numeric:tabular-nums; }
-  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
-  th, td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:right; }
-  th:first-child, td:first-child { text-align:left; }
-  th { font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
-  tfoot td { font-weight:650; border-bottom:none; }
-  .neg { color:var(--neg); }
-  .note, .msg { color:var(--muted); font-size:13px; margin-top:14px; }
-  .err { color:var(--neg); }
+  .neg { color:var(--neg) !important; }
+
+  /* Sidebar */
+  .side-card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; }
+  .navbtn { display:block; width:100%; text-align:left; font:inherit; font-weight:600; color:var(--fg); background:none;
+            border:0; border-radius:8px; padding:8px 10px; margin-top:6px; cursor:pointer; }
+  .navbtn:hover, .navbtn:focus-visible { background:var(--head); outline:none; }
+  details.side-card > summary { cursor:pointer; font-weight:650; list-style:none; }
+  details.side-card > summary::-webkit-details-marker { display:none; }
+  details.side-card > summary::after { content:"▾"; float:right; color:var(--muted); }
+  details.side-card:not([open]) > summary::after { content:"▸"; }
+  .client { padding:10px 0; border-top:1px solid var(--line); }
+  .client:first-of-type { margin-top:10px; }
+  .client .name { font-weight:650; margin-bottom:4px; }
+  .client .ln { display:flex; justify-content:space-between; font-size:14px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .client .ln b { color:var(--fg); font-weight:600; }
+  .client-total { display:flex; justify-content:space-between; padding-top:10px; border-top:1px solid var(--line); font-weight:650; font-variant-numeric:tabular-nums; }
+
+  /* Header + stat cards */
+  .top { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; justify-content:space-between; margin-bottom:16px; }
+  h1 { font-size:22px; margin:0 0 2px; }
+  #asWrap { min-width:200px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:10px; margin-bottom:22px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .stat .k { font-size:12px; color:var(--muted); }
+  .stat .v { font-size:24px; font-weight:650; font-variant-numeric:tabular-nums; }
+  .stat.owed .v { color:var(--owed-fg); }
+  .stat.paid .v { color:var(--paid-fg); }
+
+  /* Panels (both sections share this) */
+  .panel { border:1px solid var(--line); border-radius:12px; margin-bottom:22px; overflow:hidden; }
+  .panel-head { display:flex; flex-wrap:wrap; gap:8px; align-items:baseline; justify-content:space-between;
+                padding:14px 16px; background:var(--card); border-bottom:1px solid var(--line); }
+  .panel-head h2 { font-size:17px; margin:0; }
   .tablewrap { overflow-x:auto; }
-  h2 { font-size:17px; margin:34px 0 12px; }
-  .tiles { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:14px; }
-  .tile { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
-  .tile .amt { font-size:22px; font-weight:650; font-variant-numeric:tabular-nums; }
-  .tile .amt.owed { color:var(--accent); }
-  tr.month td { background:var(--card); font-weight:600; text-align:left; font-size:13px; }
-  .status-owed { font-weight:600; }
-  .status-paid { color:var(--muted); }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th, td { padding:10px 14px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+  th:first-child, td:first-child { text-align:left; white-space:normal; min-width:130px; }
+  @media (max-width: 560px) { th, td { padding:10px 8px; } }
+  th { font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; background:var(--bg); }
+  tfoot td { font-weight:650; background:var(--card); }
+  tfoot tr:last-child td { border-bottom:0; }
+  tbody tr:last-child td { border-bottom:0; }
+  tr.month td { background:var(--head); font-size:13px; font-weight:650; }
+  tr.month td:last-child { text-align:right; font-weight:500; color:var(--muted); }
+  tr.is-owed td:first-child { box-shadow: inset 3px 0 0 var(--owed-fg); }
+  .sub-type { display:block; color:var(--muted); font-size:13px; }
+
+  .chip { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:650; }
+  .chip.paid { background:var(--paid-bg); color:var(--paid-fg); }
+  .chip.owed { background:var(--owed-bg); color:var(--owed-fg); }
+  .note { padding:12px 16px; color:var(--muted); font-size:13px; border-top:1px solid var(--line); }
+  .msg { color:var(--muted); font-size:13px; margin:10px 0; }
+  .err { color:var(--neg); }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <div>
-      <h1 id="title">My payout</h1>
-      <div class="sub" id="sub"></div>
+<div class="layout">
+
+  <aside class="side">
+    <div class="side-card">
+      <label for="period">Pay period</label>
+      <select id="period"></select>
+      <button class="navbtn" type="button" data-target="sec-retainer">Retainer &amp; variable</button>
+      <button class="navbtn" type="button" data-target="sec-ai" id="navAi" hidden>AI line</button>
     </div>
-    <div class="controls">
+
+    <details class="side-card" id="clientsCard" open hidden>
+      <summary id="clientsTitle">Client revenue</summary>
+      <div class="sub" id="clientsSub" style="margin-top:6px"></div>
+      <div id="clients"></div>
+      <div class="client-total"><span>Total received</span><span id="clientsTotal"></span></div>
+    </details>
+  </aside>
+
+  <main>
+    <div class="top">
+      <div>
+        <h1 id="title">My payout</h1>
+        <div class="sub" id="sub"></div>
+      </div>
       <div id="asWrap" hidden><label for="as">View as (admin)</label><select id="as"></select></div>
-      <div><label for="period">Pay period</label><select id="period"></select></div>
     </div>
-  </header>
 
-  <div id="status" class="msg">Loading…</div>
-  <div id="content" hidden>
-    <div class="total"><div class="sub">Total payout</div><div class="amt" id="total"></div></div>
-    <div class="tablewrap">
-      <table>
-        <thead><tr><th>Client</th><th>Revenue basis</th><th>Your %</th><th>Payout</th></tr></thead>
-        <tbody id="rows"></tbody>
-        <tfoot><tr><td colspan="3">Total</td><td id="foot"></td></tr></tfoot>
-      </table>
-    </div>
-    <div class="note">Payout = revenue basis × your %. Questions about a number? Contact Ben.</div>
-  </div>
+    <div id="status" class="msg">Loading…</div>
 
-  <section id="ai" hidden>
-    <h2>AI line</h2>
-    <div class="tiles">
-      <div class="tile"><div class="sub">Earned</div><div class="amt" id="aiEarned"></div></div>
-      <div class="tile"><div class="sub">Paid</div><div class="amt" id="aiPaid"></div></div>
-      <div class="tile"><div class="sub">Still owed</div><div class="amt owed" id="aiOwed"></div></div>
+    <div class="stats">
+      <div class="stat" id="statRet" hidden><div class="k" id="kRet">Retainer &amp; variable</div><div class="v" id="vRet"></div></div>
+      <div class="stat paid" id="statPaid" hidden><div class="k">AI line · paid to date</div><div class="v" id="vPaid"></div></div>
+      <div class="stat owed" id="statOwed" hidden><div class="k">AI line · still owed to you</div><div class="v" id="vOwed"></div></div>
     </div>
-    <div class="tablewrap">
-      <table>
-        <thead><tr><th>Customer</th><th>Revenue basis</th><th>Your %</th><th>Amount</th><th>Status</th></tr></thead>
-        <tbody id="aiRows"></tbody>
-      </table>
-    </div>
-  </section>
-  <div id="aiMsg" class="msg err" hidden></div>
-</main>
+
+    <section class="panel" id="sec-retainer" hidden>
+      <div class="panel-head"><h2>Retainer &amp; variable</h2><span class="sub" id="retTag"></span></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Client</th><th>Revenue basis</th><th>Your %</th><th>Payout</th></tr></thead>
+          <tbody id="rows"></tbody>
+          <tfoot><tr><td colspan="3">Total for this period</td><td id="foot"></td></tr></tfoot>
+        </table>
+      </div>
+      <div class="note">Payout = revenue basis × your %. Questions about a number? Contact Ben.</div>
+    </section>
+
+    <section class="panel" id="sec-ai" hidden>
+      <div class="panel-head"><h2>AI line</h2><span class="sub">All months · newest first · owed items listed first</span></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Client</th><th>Revenue basis</th><th>Your %</th><th>Payout</th><th>Status</th></tr></thead>
+          <tbody id="aiRows"></tbody>
+          <tfoot>
+            <tr><td colspan="3">Total earned</td><td id="aiEarned"></td><td></td></tr>
+            <tr><td colspan="3">Paid</td><td id="aiPaid"></td><td><span class="chip paid">Paid</span></td></tr>
+            <tr><td colspan="3">Still owed</td><td id="aiOwed"></td><td><span class="chip owed">Owed</span></td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+    <div id="aiMsg" class="msg err" hidden></div>
+  </main>
+</div>
 
 <script>
   var money = new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:0 });
   var money2 = new Intl.NumberFormat('en-US', { style:'currency', currency:'USD' });
   function fmt(n) { return (n % 1 === 0 ? money : money2).format(n); }
   function $(id) { return document.getElementById(id); }
+  function pct(p) { return (Math.round(p * 1000) / 10) + '%'; }
 
   function setStatus(text, isErr) {
     var s = $('status'); s.textContent = text; s.className = isErr ? 'msg err' : 'msg'; s.hidden = !text;
   }
-  function fail(e) { $('content').hidden = true; setStatus((e && e.message) || String(e), true); }
+  function hideRetainerUi() {
+    ['sec-retainer', 'statRet', 'clientsCard'].forEach(function (id) { $(id).hidden = true; });
+  }
+  function fail(e) { hideRetainerUi(); setStatus((e && e.message) || String(e), true); }
 
   function cell(tr, text, cls) {
     var td = document.createElement('td'); td.textContent = text; if (cls) td.className = cls; tr.appendChild(td); return td;
   }
+  function chip(kind, text) {
+    var s = document.createElement('span'); s.className = 'chip ' + kind; s.textContent = text; return s;
+  }
 
+  function parseIso(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+    return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
+  }
   function periodLabel(iso) {
-    var p = iso.split('-');
-    return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric', timeZone:'UTC' });
+    var d = parseIso(iso);
+    return d ? d.toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric', timeZone:'UTC' }) : iso;
+  }
+  function shortDate(iso) {
+    var d = parseIso(iso);
+    if (!d) return iso;
+    var o = { month:'short', day:'numeric', timeZone:'UTC' };
+    if (d.getUTCFullYear() !== new Date().getFullYear()) o.year = 'numeric';
+    return d.toLocaleDateString('en-US', o);
+  }
+  function monthLabel(m) {
+    if (!/^\d{4}-\d{2}$/.test(m)) return m;
+    var p = m.split('-');
+    return new Date(Date.UTC(+p[0], +p[1] - 1, 1)).toLocaleDateString('en-US', { year:'numeric', month:'long', timeZone:'UTC' });
   }
 
   function viewAs() { return $('asWrap').hidden ? null : $('as').value; }
+  function periodText() { var o = $('period').selectedOptions[0]; return o ? o.textContent : ''; }
 
   function load() { loadRetainer(); loadAi(); }
 
@@ -116,65 +211,117 @@
   function loadAi() {
     $('aiMsg').hidden = true;
     google.script.run.withFailureHandler(function (e) {
-      $('ai').hidden = true; $('aiMsg').textContent = 'AI line: ' + ((e && e.message) || e); $('aiMsg').hidden = false;
+      hideAiUi(); $('aiMsg').textContent = 'AI line: ' + ((e && e.message) || e); $('aiMsg').hidden = false;
     }).withSuccessHandler(renderAi).getAiStatement(viewAs());
   }
+  function hideAiUi() { ['sec-ai', 'statPaid', 'statOwed', 'navAi'].forEach(function (id) { $(id).hidden = true; }); }
 
-  function monthLabel(m) {
-    if (!/^\d{4}-\d{2}$/.test(m)) return m;
-    var p = m.split('-');
-    return new Date(Date.UTC(+p[0], +p[1] - 1, 1)).toLocaleDateString('en-US', { year:'numeric', month:'long', timeZone:'UTC' });
-  }
-
-  function renderAi(st) {
-    var body = $('aiRows'); body.textContent = '';
-    if (!st || !st.enabled || !st.months.length) { $('ai').hidden = true; return; }
-    $('ai').hidden = false;
-    $('aiEarned').textContent = fmt(st.earned);
-    $('aiPaid').textContent = fmt(st.paid);
-    $('aiOwed').textContent = fmt(st.owed);
-    st.months.forEach(function (m) {
-      var h = document.createElement('tr'); h.className = 'month';
-      var td = cell(h, monthLabel(m.month) + '  ·  earned ' + fmt(m.earned) + '  ·  paid ' + fmt(m.paid) + '  ·  owed ' + fmt(m.owed));
-      td.colSpan = 5; body.appendChild(h);
-      m.lines.forEach(function (l) {
-        var tr = document.createElement('tr');
-        cell(tr, l.type ? l.customer + ' — ' + l.type : l.customer);
-        cell(tr, l.basis ? fmt(l.basis) : '—');
-        cell(tr, l.pct ? (Math.round(l.pct * 1000) / 10) + '%' : '—');
-        cell(tr, fmt(l.amount), l.amount < 0 ? 'neg' : '');
-        cell(tr, l.status === 'paid' ? (l.paidDate ? 'Paid ' + l.paidDate : 'Paid') : 'Owed', 'status-' + l.status);
-        body.appendChild(tr);
-      });
-    });
-  }
-
+  /* ---- Retainer & variable ---- */
   function render(st) {
     setStatus('');
-    $('content').hidden = false;
+    var label = periodText();
     $('title').textContent = st.person + "'s payout";
-    $('total').textContent = fmt(st.total);
-    $('total').className = 'amt' + (st.total < 0 ? ' neg' : '');
+
+    $('statRet').hidden = false;
+    $('kRet').textContent = 'Retainer & variable · ' + label;
+    $('vRet').textContent = fmt(st.total);
+    $('vRet').className = 'v' + (st.total < 0 ? ' neg' : '');
+
+    $('sec-retainer').hidden = false;
+    $('retTag').textContent = 'Pay period ' + label;
     var body = $('rows'); body.textContent = '';
     st.lines.forEach(function (l) {
       var tr = document.createElement('tr');
       cell(tr, l.client);
       cell(tr, l.basis ? fmt(l.basis) : '—');
-      cell(tr, (Math.round(l.pct * 1000) / 10) + '%');
+      cell(tr, pct(l.pct));
       cell(tr, fmt(l.payout), l.payout < 0 ? 'neg' : '');
       body.appendChild(tr);
     });
     if (st.other) {
-      var tr = document.createElement('tr');
-      cell(tr, 'Other / adjustments'); cell(tr, ''); cell(tr, '');
-      cell(tr, fmt(st.other), st.other < 0 ? 'neg' : '');
-      body.appendChild(tr);
+      var o = document.createElement('tr');
+      cell(o, 'Other / adjustments'); cell(o, ''); cell(o, '');
+      cell(o, fmt(st.other), st.other < 0 ? 'neg' : '');
+      body.appendChild(o);
     }
     if (!st.lines.length && !st.other) {
       var e = document.createElement('tr'); var td = cell(e, 'No payout lines for this period.'); td.colSpan = 4; body.appendChild(e);
     }
     $('foot').textContent = fmt(st.total);
+    $('foot').className = st.total < 0 ? 'neg' : '';
+
+    renderClients(st.clients, label);
   }
+
+  /* ---- Sidebar: client revenue (column B of the period tab) ---- */
+  function renderClients(c, label) {
+    var card = $('clientsCard');
+    if (!c) { card.hidden = true; return; }
+    card.hidden = false;
+    $('clientsTitle').textContent = 'Client revenue · ' + label;
+    $('clientsSub').textContent = c.scope === 'all' ? 'All clients received this period' : 'Clients you work on, received this period';
+    var box = $('clients'); box.textContent = '';
+    if (!c.lines.length) {
+      var none = document.createElement('div'); none.className = 'sub'; none.style.padding = '10px 0';
+      none.textContent = 'No client revenue recorded for this period yet.'; box.appendChild(none);
+    }
+    c.lines.forEach(function (l) {
+      var d = document.createElement('div'); d.className = 'client';
+      var n = document.createElement('div'); n.className = 'name'; n.textContent = l.client; d.appendChild(n);
+      [['Retainer', l.retainer], ['Variable', l.variable]].forEach(function (r) {
+        var ln = document.createElement('div'); ln.className = 'ln';
+        var a = document.createElement('span'); a.textContent = r[0];
+        var b = document.createElement('b'); b.textContent = fmt(r[1]);
+        ln.appendChild(a); ln.appendChild(b); d.appendChild(ln);
+      });
+      box.appendChild(d);
+    });
+    $('clientsTotal').textContent = fmt(c.total);
+  }
+
+  /* ---- AI line ---- */
+  function renderAi(st) {
+    var body = $('aiRows'); body.textContent = '';
+    if (!st || !st.enabled || !st.months.length) { hideAiUi(); return; }
+    $('sec-ai').hidden = false; $('navAi').hidden = false;
+    $('statPaid').hidden = false; $('statOwed').hidden = false;
+    $('vPaid').textContent = fmt(st.paid);
+    $('vOwed').textContent = fmt(st.owed);
+    $('aiEarned').textContent = fmt(st.earned);
+    $('aiPaid').textContent = fmt(st.paid);
+    $('aiOwed').textContent = fmt(st.owed);
+
+    st.months.forEach(function (m) {
+      var h = document.createElement('tr'); h.className = 'month';
+      var a = cell(h, monthLabel(m.month)); a.colSpan = 3;
+      var b = cell(h, 'Paid ' + fmt(m.paid) + '  ·  Owed ' + fmt(m.owed)); b.colSpan = 2;
+      body.appendChild(h);
+      m.lines.forEach(function (l) {
+        var tr = document.createElement('tr');
+        if (l.status === 'owed') tr.className = 'is-owed';
+        var first = cell(tr, l.customer);
+        if (l.type) { var t = document.createElement('span'); t.className = 'sub-type'; t.textContent = l.type; first.appendChild(t); }
+        cell(tr, l.basis ? fmt(l.basis) : '—');
+        cell(tr, l.pct ? pct(l.pct) : '—');
+        cell(tr, fmt(l.amount), l.amount < 0 ? 'neg' : '');
+        var s = document.createElement('td');
+        s.appendChild(l.status === 'paid' ? chip('paid', l.paidDate ? 'Paid ' + shortDate(l.paidDate) : 'Paid') : chip('owed', 'Owed'));
+        tr.appendChild(s);
+        body.appendChild(tr);
+      });
+    });
+  }
+
+  /* On narrow screens (phones, narrow Site embeds) start with the client card collapsed */
+  if (window.innerWidth < 860) $('clientsCard').open = false;
+
+  /* ---- Sidebar nav (buttons, not #links: links would navigate the Site's top frame) ---- */
+  Array.prototype.forEach.call(document.querySelectorAll('.navbtn'), function (btn) {
+    btn.addEventListener('click', function () {
+      var el = $(btn.getAttribute('data-target'));
+      if (el && !el.hidden) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
 
   google.script.run.withFailureHandler(fail).withSuccessHandler(function (b) {
     $('sub').textContent = 'Signed in as ' + b.viewer.name;
