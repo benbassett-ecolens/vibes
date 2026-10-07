@@ -3,7 +3,7 @@ const fs = require('fs');
 const vm = require('vm');
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(__dirname + '/Code.gs', 'utf8') + '\nthis.parsePeriod_ = parsePeriod_; this.parseLedger_ = parseLedger_; this.parseClients_ = parseClients_;', ctx);
+vm.runInContext(fs.readFileSync(__dirname + '/Code.gs', 'utf8') + '\nthis.parsePeriod_ = parsePeriod_; this.parseLedger_ = parseLedger_; this.parseClients_ = parseClients_; this.parsePayments_ = parsePayments_;', ctx);
 const assert = require('assert');
 
 const R = (a, b, c, d) => [a, b, c, d, '', '', '', '', '', '', '', '', ''];
@@ -89,4 +89,19 @@ let ca = ctx.parseClients_(grid, 'Ben Bassett', true);            // admin view:
 assert.strictEqual(JSON.stringify(ca.lines.map((x) => x.client)), '["Alpha","Beta","Gamma"]');  // unnamed $0 block skipped
 assert.strictEqual(ca.total, 19000);
 assert.strictEqual(ca.scope, 'all');
+// Retainer payments: filtered by person + pay period, partial payments add up
+const pay = [
+  ['Pay period', 'Person', 'Amount', 'Paid date', 'Note'],
+  ['2026-10-15', 'David Gersten', 500, '2026-10-20', 'first half'],
+  [new Date(Date.UTC(2026, 9, 15)), 'David', 250, new Date(Date.UTC(2026, 9, 25)), ''],
+  ['20261015', 'david gersten', 100, '', 'text period'],
+  ['2026-09-15', 'David Gersten', 999, '2026-09-20', 'other period'],
+  ['2026-10-15', 'Naomi Marti', 700, '', ''],
+];
+let pd = ctx.parsePayments_(pay, 'David Gersten', '2026-10-15', fmtDate);
+assert.strictEqual(pd.paid, 850);
+assert.strictEqual(pd.lines.length, 3);
+assert.strictEqual(pd.lines[1].date, '2026-10-25');
+assert.strictEqual(ctx.parsePayments_(pay, 'Chris McDonald', '2026-10-15', fmtDate).paid, 0);
+assert.throws(() => ctx.parsePayments_([['Person', 'Amount']], 'X', '2026-10-15', fmtDate));
 console.log('ok');

@@ -62,3 +62,15 @@ rows). Clients with no revenue in either are hidden.
 `CLIENT_PANEL_SCOPE` in `Code.gs` controls who sees what: `'mine'` (default) shows each teammate only
 the clients they have a row in; `'all'` shows every client to everyone. Admins viewing their own page
 always see all clients, and "View as" shows exactly what that teammate sees.
+
+## Retainer Payments (paid / still owed for retainer & variable)
+
+The retainer tabs only calculate what each person earns, so payments are recorded in a tab named
+`Retainer Payments` with these headers (order does not matter):
+
+`Pay period | Person | Amount | Paid date | Note`
+
+One row per payment, e.g. `2026-10-15 | David Gersten | 3000 | 2026-10-20 | First transfer`.
+`Pay period` is the date in the payout tab's name. Partial payments add up. For each person and
+period: Paid = sum of their payments, Still owed = max(0, earned - paid). Without the tab, the
+Paid / Still owed cards are hidden.

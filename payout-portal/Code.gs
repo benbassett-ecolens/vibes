@@ -15,6 +15,7 @@ const HEADER_ROW = 1;                          // row holding person names in th
 const TOTALS_ROW = 2;                          // row holding each person's total payout
 const SUMMARY_FIRST_COL = 6;                   // column F (1-based) where person columns start
 const LEDGER_TAB = 'AI Ledger';                // running AI-line ledger (see README)
+const PAYMENTS_TAB = 'Retainer Payments';      // payments made against retainer/variable pay periods (see README)
 // Sidebar "Client revenue": 'mine' = only clients the viewer is on; 'all' = every client for everyone.
 // Admins viewing their own page always see all clients.
 const CLIENT_PANEL_SCOPE = 'mine';
@@ -43,9 +44,12 @@ function getStatement(periodName, asName) {
   if (!periods.some(function (p) { return p.name === periodName; })) {
     throw new Error('Unknown period.');
   }
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(periodName);
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName(periodName);
   const values = sheet.getDataRange().getValues();
   const statement = parsePeriod_(values, ctx.target.name);
+  const d = periodName.slice(0, 8);
+  statement.payments = readPayments_(ss, ctx.target.name, d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6, 8), statement.total);
   const showAll = CLIENT_PANEL_SCOPE === 'all' || (ctx.isAdmin && ctx.selfView);
   statement.clients = parseClients_(values, ctx.target.name, showAll);
   statement.person = ctx.target.name;
@@ -62,6 +66,21 @@ function getAiStatement(asName) {
   return parseLedger_(sheet.getDataRange().getValues(), ctx.target.name, function (d) {
     return Utilities.formatDate(d, tz, 'yyyy-MM-dd');
   });
+}
+
+function readPayments_(ss, personName, periodIso, total) {
+  const sheet = ss.getSheetByName(PAYMENTS_TAB);
+  if (!sheet) return { enabled: false, paid: 0, owed: 0, lines: [] };
+  const tz = ss.getSpreadsheetTimeZone();
+  try {
+    const p = parsePayments_(sheet.getDataRange().getValues(), personName, periodIso, function (d) {
+      return Utilities.formatDate(d, tz, 'yyyy-MM-dd');
+    });
+    p.owed = round2_(Math.max(0, total - p.paid));
+    return p;
+  } catch (e) {
+    return { enabled: false, paid: 0, owed: 0, lines: [], error: e.message };
+  }
 }
 
 // ---- Identity --------------------------------------------------------------
@@ -161,6 +180,45 @@ function parsePeriod_(values, personName) {
   if (total === null) total = blockTotal;
 
   return { lines: lines, blockTotal: blockTotal, other: round2_(total - blockTotal), total: total };
+}
+
+function normPeriod_(v, fmtDate) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return fmtDate(v);
+  const s = String(v || '').trim();
+  if (/^\d{8}$/.test(s)) return s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
+  const m = s.match(/^\d{4}-\d{2}-\d{2}/);
+  return m ? m[0] : s;
+}
+
+/**
+ * Retainer Payments tab: one row per payment. Columns are found by header name:
+ *   Pay period | Person | Amount | Paid date | Note
+ * Only rows for this person and this pay period count. owed is filled in by the caller.
+ */
+function parsePayments_(values, personName, periodIso, fmtDate) {
+  const empty = { enabled: true, paid: 0, owed: 0, lines: [] };
+  if (!values.length) return empty;
+  const head = values[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  const col = { period: head.indexOf('pay period'), person: head.indexOf('person'), amount: head.indexOf('amount'),
+                paidDate: head.indexOf('paid date'), note: head.indexOf('note') };
+  if (col.period < 0 || col.person < 0 || col.amount < 0) {
+    throw new Error('Retainer Payments needs Pay period, Person and Amount columns.');
+  }
+  const want = aliases_(personName);
+  const get = function (row, i) { return i < 0 ? '' : row[i]; };
+  const dateStr = function (v) { return Object.prototype.toString.call(v) === '[object Date]' ? fmtDate(v) : String(v || '').trim(); };
+
+  const lines = [];
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    if (want.indexOf(String(get(row, col.person)).trim().toLowerCase()) === -1) continue;
+    if (normPeriod_(get(row, col.period), fmtDate) !== periodIso) continue;
+    const amount = round2_(num_(get(row, col.amount)));
+    if (amount === 0) continue;
+    lines.push({ amount: amount, date: dateStr(get(row, col.paidDate)), note: String(get(row, col.note)).trim() });
+  }
+  const paid = round2_(lines.reduce(function (s, l) { return s + l.amount; }, 0));
+  return { enabled: true, paid: paid, owed: 0, lines: lines };
 }
 
 /**

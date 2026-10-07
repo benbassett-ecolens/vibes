@@ -53,7 +53,9 @@
   .top { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; justify-content:space-between; margin-bottom:16px; }
   h1 { font-size:22px; margin:0 0 2px; }
   #asWrap { min-width:200px; }
-  .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:10px; margin-bottom:22px; }
+  .statgroup { margin-bottom:18px; }
+  .grp-title { font-size:13px; font-weight:650; color:var(--muted); margin:0 0 8px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
   .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
   .stat .k { font-size:12px; color:var(--muted); }
   .stat .v { font-size:24px; font-weight:650; font-variant-numeric:tabular-nums; }
@@ -82,6 +84,11 @@
   .chip { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:650; }
   .chip.paid { background:var(--paid-bg); color:var(--paid-fg); }
   .chip.owed { background:var(--owed-bg); color:var(--owed-fg); }
+  .paylist { padding:12px 16px; border-top:1px solid var(--line); }
+  .paylist .pl-title { font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px; }
+  .pay { display:flex; gap:10px; align-items:center; padding:6px 0; font-variant-numeric:tabular-nums; }
+  .pay .amt { margin-left:auto; font-weight:650; }
+  .pay .nt { color:var(--muted); font-size:13px; }
   .note { padding:12px 16px; color:var(--muted); font-size:13px; border-top:1px solid var(--line); }
   .msg { color:var(--muted); font-size:13px; margin:10px 0; }
   .err { color:var(--neg); }
@@ -117,10 +124,22 @@
 
     <div id="status" class="msg">Loading…</div>
 
-    <div class="stats">
-      <div class="stat" id="statRet" hidden><div class="k" id="kRet">Retainer &amp; variable</div><div class="v" id="vRet"></div></div>
-      <div class="stat paid" id="statPaid" hidden><div class="k">AI line · paid to date</div><div class="v" id="vPaid"></div></div>
-      <div class="stat owed" id="statOwed" hidden><div class="k">AI line · still owed to you</div><div class="v" id="vOwed"></div></div>
+    <div class="statgroup" id="grpRet" hidden>
+      <div class="grp-title" id="grpRetTitle">Retainer &amp; variable</div>
+      <div class="stats">
+        <div class="stat"><div class="k">Earned</div><div class="v" id="vRet"></div></div>
+        <div class="stat paid" id="statRetPaid" hidden><div class="k">Paid</div><div class="v" id="vRetPaid"></div></div>
+        <div class="stat owed" id="statRetOwed" hidden><div class="k">Still owed to you</div><div class="v" id="vRetOwed"></div></div>
+      </div>
+    </div>
+
+    <div class="statgroup" id="grpAi" hidden>
+      <div class="grp-title">AI line · all months</div>
+      <div class="stats">
+        <div class="stat"><div class="k">Earned</div><div class="v" id="vAiEarned"></div></div>
+        <div class="stat paid"><div class="k">Paid to date</div><div class="v" id="vPaid"></div></div>
+        <div class="stat owed"><div class="k">Still owed to you</div><div class="v" id="vOwed"></div></div>
+      </div>
     </div>
 
     <section class="panel" id="sec-retainer" hidden>
@@ -129,10 +148,15 @@
         <table>
           <thead><tr><th>Client</th><th>Revenue basis</th><th>Your %</th><th>Payout</th></tr></thead>
           <tbody id="rows"></tbody>
-          <tfoot><tr><td colspan="3">Total for this period</td><td id="foot"></td></tr></tfoot>
+          <tfoot>
+            <tr><td colspan="3">Total earned this period</td><td id="foot"></td></tr>
+            <tr id="retPaidRow" hidden><td colspan="3"><span class="chip paid">Paid</span></td><td id="retPaid"></td></tr>
+            <tr id="retOwedRow" hidden><td colspan="3"><span class="chip owed">Still owed</span></td><td id="retOwed"></td></tr>
+          </tfoot>
         </table>
       </div>
-      <div class="note">Payout = revenue basis × your %. Questions about a number? Contact Ben.</div>
+      <div class="paylist" id="payList" hidden><div class="pl-title">Payments received for this period</div><div id="payRows"></div></div>
+      <div class="note" id="payNote">Payout = revenue basis × your %. Questions about a number? Contact Ben.</div>
     </section>
 
     <section class="panel" id="sec-ai" hidden>
@@ -164,7 +188,7 @@
     var s = $('status'); s.textContent = text; s.className = isErr ? 'msg err' : 'msg'; s.hidden = !text;
   }
   function hideRetainerUi() {
-    ['sec-retainer', 'statRet', 'clientsCard'].forEach(function (id) { $(id).hidden = true; });
+    ['sec-retainer', 'grpRet', 'clientsCard'].forEach(function (id) { $(id).hidden = true; });
   }
   function fail(e) { hideRetainerUi(); setStatus((e && e.message) || String(e), true); }
 
@@ -214,7 +238,7 @@
       hideAiUi(); $('aiMsg').textContent = 'AI line: ' + ((e && e.message) || e); $('aiMsg').hidden = false;
     }).withSuccessHandler(renderAi).getAiStatement(viewAs());
   }
-  function hideAiUi() { ['sec-ai', 'statPaid', 'statOwed', 'navAi'].forEach(function (id) { $(id).hidden = true; }); }
+  function hideAiUi() { ['sec-ai', 'grpAi', 'navAi'].forEach(function (id) { $(id).hidden = true; }); }
 
   /* ---- Retainer & variable ---- */
   function render(st) {
@@ -222,10 +246,11 @@
     var label = periodText();
     $('title').textContent = st.person + "'s payout";
 
-    $('statRet').hidden = false;
-    $('kRet').textContent = 'Retainer & variable · ' + label;
+    $('grpRet').hidden = false;
+    $('grpRetTitle').textContent = 'Retainer & variable · ' + label;
     $('vRet').textContent = fmt(st.total);
     $('vRet').className = 'v' + (st.total < 0 ? ' neg' : '');
+    renderPayments(st.payments);
 
     $('sec-retainer').hidden = false;
     $('retTag').textContent = 'Pay period ' + label;
@@ -251,6 +276,29 @@
     $('foot').className = st.total < 0 ? 'neg' : '';
 
     renderClients(st.clients, label);
+  }
+
+  /* Paid / still owed for this pay period (from the Retainer Payments tab) */
+  function renderPayments(p) {
+    var on = !!(p && p.enabled);
+    ['statRetPaid', 'statRetOwed', 'retPaidRow', 'retOwedRow'].forEach(function (id) { $(id).hidden = !on; });
+    $('payList').hidden = true;
+    $('payNote').textContent = 'Payout = revenue basis × your %. Questions about a number? Contact Ben.' +
+      (p && p.error ? '  (Payments could not be read: ' + p.error + ')' : '');
+    if (!on) return;
+    $('vRetPaid').textContent = fmt(p.paid);
+    $('vRetOwed').textContent = fmt(p.owed);
+    $('retPaid').textContent = fmt(p.paid);
+    $('retOwed').textContent = fmt(p.owed);
+    var box = $('payRows'); box.textContent = '';
+    p.lines.forEach(function (l) {
+      var r = document.createElement('div'); r.className = 'pay';
+      r.appendChild(chip('paid', l.date ? 'Paid ' + shortDate(l.date) : 'Paid'));
+      if (l.note) { var n = document.createElement('span'); n.className = 'nt'; n.textContent = l.note; r.appendChild(n); }
+      var a = document.createElement('span'); a.className = 'amt'; a.textContent = fmt(l.amount); r.appendChild(a);
+      box.appendChild(r);
+    });
+    $('payList').hidden = !p.lines.length;
   }
 
   /* ---- Sidebar: client revenue (column B of the period tab) ---- */
@@ -284,7 +332,8 @@
     var body = $('aiRows'); body.textContent = '';
     if (!st || !st.enabled || !st.months.length) { hideAiUi(); return; }
     $('sec-ai').hidden = false; $('navAi').hidden = false;
-    $('statPaid').hidden = false; $('statOwed').hidden = false;
+    $('grpAi').hidden = false;
+    $('vAiEarned').textContent = fmt(st.earned);
     $('vPaid').textContent = fmt(st.paid);
     $('vOwed').textContent = fmt(st.owed);
     $('aiEarned').textContent = fmt(st.earned);
