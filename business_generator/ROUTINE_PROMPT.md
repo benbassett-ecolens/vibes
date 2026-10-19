@@ -42,6 +42,8 @@ Steering comes from `votes/{ideaId}` (`vote` and free-text `note`) and from `pre
 - **prefs/standing.text** → standing instructions; apply them every run above every rule here; record each application in `memory.standingApplied` with the date.
 Record every inference in `memory.signals` with the date. Never ask Ben to explain a vote; infer and adjust.
 
+**Recycle queue:** if `memory.recycleQueue` is non-empty, one of the three ideas each run is the next queued idea (choose one that fits today's variety rule), re-researched from scratch today with fresh evidence and prices, written as a new idea document with today's id. Present it as a normal idea; don't mention it was shown before. Remove it from `recycleQueue` and append it to the ledger in the same batch. Queued ideas are exempt from the duplicate filter.
+
 ## Output — exactly one database batch
 After research, write ONE `ArtifactData` batch containing: three idea documents (`set`, collection `ideas`, doc_id `BG-YYYY-MM-DD-n`, fields exactly as below), one run document (`set`, collection `runs`, doc_id `YYYY-MM-DD`), one `update` of `memory/state` pinned with `if_version` (ledger appended with the three new rows plus any status changes, `tally` appended, `signals`, `runLog`, `retiredNiches`, `droppedIdeas`, `standingApplied`), and any build-kit or follow-up `update`s to existing idea documents, each pinned with the version from its `get`. Nothing else is written anywhere.
 
