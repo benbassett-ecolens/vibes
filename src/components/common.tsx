@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { RockStatus } from '../types'
 import { useApp } from '../store'
 import { type SortState } from '../sort'
@@ -283,5 +283,49 @@ export function ArchiveToggle({
         Archived{count > 0 ? ` (${count})` : ''}
       </button>
     </div>
+  )
+}
+
+/**
+ * A single-line text field that wraps long text onto more lines instead of
+ * cutting it off, growing to fit. Enter finishes editing rather than adding
+ * a line break.
+ */
+export function WrapInput({
+  value,
+  onChange,
+  className = '',
+  placeholder,
+  title,
+}: {
+  value: string
+  onChange: (value: string) => void
+  className?: string
+  placeholder?: string
+  title?: string
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      className={`wrap-input ${className}`}
+      value={value}
+      placeholder={placeholder}
+      title={title}
+      onChange={(e) => onChange(e.target.value.replace(/\n/g, ' '))}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          e.currentTarget.blur()
+        }
+      }}
+    />
   )
 }

@@ -552,6 +552,18 @@ function makeActions(setData: React.Dispatch<React.SetStateAction<AppData>>) {
         }),
       }))
     },
+    /** Manual ordering: move an issue to just before or after another one. */
+    moveIssue(id: string, targetId: string, place: 'before' | 'after') {
+      setData((d) => {
+        const moving = d.issues.find((i) => i.id === id)
+        if (!moving || id === targetId) return d
+        const rest = d.issues.filter((i) => i.id !== id)
+        const at = rest.findIndex((i) => i.id === targetId)
+        if (at < 0) return d
+        rest.splice(place === 'after' ? at + 1 : at, 0, moving)
+        return { ...d, issues: rest }
+      })
+    },
     setIssueArchived(id: string, archived: boolean) {
       setData((d) => ({
         ...d,

@@ -11,7 +11,15 @@ import {
 import { useApp } from '../store'
 import { ScorecardHistory } from './ScorecardHistory'
 import { defaultSort, sortItems, type SortState } from '../sort'
-import { ConfirmButton, EmptyState, NumberInput, PersonSelect, SortableHeader, usePersonName } from './common'
+import {
+  ConfirmButton,
+  EmptyState,
+  NumberInput,
+  PersonSelect,
+  SortableHeader,
+  usePersonName,
+  WrapInput,
+} from './common'
 
 type MetricSortField = 'name' | 'owner' | 'goal' | 'cur' | 'prev' | 'avg'
 
@@ -55,11 +63,11 @@ function MetricRow({ metric, cadence }: { metric: Metric; cadence: Cadence }) {
             {expanded ? '▾' : '▸'}
           </button>
         </td>
-        <td>
-          <input
+        <td className="metric-name">
+          <WrapInput
             className="ghost"
             value={metric.name}
-            onChange={(e) => actions.updateMetric(metric.id, { name: e.target.value })}
+            onChange={(name) => actions.updateMetric(metric.id, { name })}
           />
         </td>
         <td>

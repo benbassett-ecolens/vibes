@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { IssueTerm } from '../types'
 import { useApp } from '../store'
 import { defaultSort, sortItems, type SortState } from '../sort'
@@ -35,6 +35,12 @@ export function Issues() {
   const [showAllSolved, setShowAllSolved] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
   const [sort, setSort] = useState<SortState<IssueSortField>>(defaultSort)
+  // Manual drag-and-drop ordering (only while no column sort is applied).
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [drop, setDrop] = useState<{ id: string; place: 'before' | 'after' } | null>(null)
+  const dropRef = useRef(drop)
+  dropRef.current = drop
+  const manual = !sort.field
 
   const submit = () => {
     if (!name.trim()) return
@@ -75,6 +81,46 @@ export function Issues() {
         return personName(issue.implementerId)
     }
   })
+
+  /** Which issue group is under the pointer, and whether it's the top or bottom half. */
+  const dropTargetAt = (x: number, y: number) => {
+    const group = document.elementFromPoint(x, y)?.closest<HTMLElement>('tbody.issue-group')
+    const id = group?.dataset.issueId
+    if (!group || !id) return null
+    const rect = group.getBoundingClientRect()
+    return { id, place: y < rect.top + rect.height / 2 ? ('before' as const) : ('after' as const) }
+  }
+
+  const startDrag = (e: PointerEvent<HTMLButtonElement>, id: string) => {
+    if (!manual || e.button !== 0) return
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDragId(id)
+    setDrop(null)
+  }
+  const moveDrag = (e: PointerEvent<HTMLButtonElement>) => {
+    if (!dragId) return
+    const target = dropTargetAt(e.clientX, e.clientY)
+    setDrop(target && target.id !== dragId ? target : null)
+  }
+  const endDrag = () => {
+    const target = dropRef.current
+    if (dragId && target) actions.moveIssue(dragId, target.id, target.place)
+    setDragId(null)
+    setDrop(null)
+  }
+  /** Keyboard alternative: arrow keys move the issue one place among those shown. */
+  const keyMove = (e: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!manual) return
+    const id = issues[index].id
+    if (e.key === 'ArrowUp' && index > 0) {
+      e.preventDefault()
+      actions.moveIssue(id, issues[index - 1].id, 'before')
+    } else if (e.key === 'ArrowDown' && index < issues.length - 1) {
+      e.preventDefault()
+      actions.moveIssue(id, issues[index + 1].id, 'after')
+    }
+  }
 
   return (
     <section>
@@ -134,16 +180,28 @@ export function Issues() {
         noun="issues"
       />
 
-      {!showArchived && (
-        <label className="show-solved">
-          <input
-            type="checkbox"
-            checked={showAllSolved}
-            onChange={(e) => setShowAllSolved(e.target.checked)}
-          />
-          Show all solved issues (older than {SOLVED_WINDOW_DAYS} days)
-        </label>
-      )}
+      <div className="issues-toolbar">
+        {!showArchived && (
+          <label className="show-solved">
+            <input
+              type="checkbox"
+              checked={showAllSolved}
+              onChange={(e) => setShowAllSolved(e.target.checked)}
+            />
+            Show all solved issues (older than {SOLVED_WINDOW_DAYS} days)
+          </label>
+        )}
+        {manual ? (
+          <span className="hint">Drag ⠿ to put issues in the order you'll work them.</span>
+        ) : (
+          <span className="hint">
+            Sorted by column.{' '}
+            <button type="button" className="text-btn" onClick={() => setSort(defaultSort())}>
+              Back to manual order
+            </button>
+          </span>
+        )}
+      </div>
 
       {issues.length === 0 ? (
         <EmptyState>
@@ -172,21 +230,48 @@ export function Issues() {
                 <th></th>
               </tr>
             </thead>
-            {issues.map((issue) => (
+            {issues.map((issue, index) => (
               // One tbody per issue: the issue line, then its details and decision
               // at full width underneath so long text has room.
               <tbody
                 key={issue.id}
-                className={`issue-group ${issue.solved ? 'row-solved' : ''} ${issue.archivedAt ? 'is-archived' : ''}`}
+                data-issue-id={issue.id}
+                className={[
+                  'issue-group',
+                  issue.solved ? 'row-solved' : '',
+                  issue.archivedAt ? 'is-archived' : '',
+                  dragId === issue.id ? 'is-dragging' : '',
+                  drop?.id === issue.id ? `drop-${drop.place}` : '',
+                ].join(' ')}
               >
                 <tr>
                   <td>
-                    <input
-                      type="checkbox"
-                      title={issue.solved ? `Solved ${issue.solvedAt}` : 'Mark solved'}
-                      checked={issue.solved}
-                      onChange={(e) => actions.updateIssue(issue.id, { solved: e.target.checked })}
-                    />
+                    <span className="solved-cell">
+                      {manual && (
+                        <button
+                          type="button"
+                          className="drag-handle"
+                          title="Drag to reorder (or use the arrow keys)"
+                          aria-label={`Reorder ${issue.name}`}
+                          onPointerDown={(e) => startDrag(e, issue.id)}
+                          onPointerMove={moveDrag}
+                          onPointerUp={endDrag}
+                          onPointerCancel={() => {
+                            setDragId(null)
+                            setDrop(null)
+                          }}
+                          onKeyDown={(e) => keyMove(e, index)}
+                        >
+                          ⠿
+                        </button>
+                      )}
+                      <input
+                        type="checkbox"
+                        title={issue.solved ? `Solved ${issue.solvedAt}` : 'Mark solved'}
+                        checked={issue.solved}
+                        onChange={(e) => actions.updateIssue(issue.id, { solved: e.target.checked })}
+                      />
+                    </span>
                   </td>
                   <td>
                     <input

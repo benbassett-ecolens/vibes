@@ -11,6 +11,7 @@ import {
   SortSelect,
   StatusSelect,
   usePersonName,
+  WrapInput,
 } from './common'
 
 type RockSortField = 'name' | 'owner' | 'dueDate' | 'status' | 'progress'
@@ -61,11 +62,13 @@ function MilestoneRow({ rock, ms }: { rock: Rock; ms: Milestone }) {
         onChange={(status) => actions.updateMilestone(rock.id, ms.id, { status })}
         title="Milestone status"
       />
-      <input
-        className={`ghost grow ${ms.status === 'completed' ? 'strike' : ''}`}
-        value={ms.name}
-        onChange={(e) => actions.updateMilestone(rock.id, ms.id, { name: e.target.value })}
-      />
+      <div className="grow ms-name">
+        <WrapInput
+          className={`ghost ${ms.status === 'completed' ? 'strike' : ''}`}
+          value={ms.name}
+          onChange={(name) => actions.updateMilestone(rock.id, ms.id, { name })}
+        />
+      </div>
       <PersonSelect
         value={ms.ownerId}
         onChange={(ownerId) => actions.updateMilestone(rock.id, ms.id, { ownerId })}
@@ -99,15 +102,33 @@ function MilestoneRow({ rock, ms }: { rock: Rock; ms: Milestone }) {
   )
 }
 
-function RockCard({ rock }: { rock: Rock }) {
+type MilestoneOrder = 'added' | 'dueAsc' | 'dueDesc'
+
+/** Order milestones for display; undated milestones always go last. */
+function orderMilestones(list: Milestone[], order: MilestoneOrder): Milestone[] {
+  if (order === 'added') return list
+  const dated = list.filter((m) => m.dueDate)
+  const undated = list.filter((m) => !m.dueDate)
+  dated.sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  if (order === 'dueDesc') dated.reverse()
+  return [...dated, ...undated]
+}
+
+function RockCard({ rock, msOrder }: { rock: Rock; msOrder: MilestoneOrder }) {
   const { data, actions } = useApp()
   const [msName, setMsName] = useState('')
   const [msOwnerId, setMsOwnerId] = useState('')
   const [msDueDate, setMsDueDate] = useState('')
   const [showArchivedMs, setShowArchivedMs] = useState(false)
 
-  const activeMilestones = rock.milestones.filter((m) => !m.archivedAt)
-  const archivedMilestones = rock.milestones.filter((m) => m.archivedAt)
+  const activeMilestones = orderMilestones(
+    rock.milestones.filter((m) => !m.archivedAt),
+    msOrder,
+  )
+  const archivedMilestones = orderMilestones(
+    rock.milestones.filter((m) => m.archivedAt),
+    msOrder,
+  )
   const done = activeMilestones.filter((m) => m.status === 'completed').length
   const total = activeMilestones.length
   const pct = total === 0 ? 0 : Math.round((done / total) * 100)
@@ -243,6 +264,7 @@ export function Rocks() {
   const [dueDate, setDueDate] = useState('')
   const [sort, setSort] = useState<SortState<RockSortField>>(defaultSort)
   const [showArchived, setShowArchived] = useState(false)
+  const [msOrder, setMsOrder] = useState<MilestoneOrder>('added')
 
   const archivedCount = data.rocks.filter((r) => r.archivedAt).length
   const visible = data.rocks.filter((r) => (showArchived ? r.archivedAt : !r.archivedAt))
@@ -281,17 +303,32 @@ export function Rocks() {
             to keep them on record without cluttering the quarter.
           </p>
         </div>
-        <SortSelect
-          value={sort}
-          onChange={setSort}
-          options={[
-            { value: 'name', label: 'Name' },
-            { value: 'owner', label: 'Owner' },
-            { value: 'dueDate', label: 'Due date' },
-            { value: 'status', label: 'Status' },
-            { value: 'progress', label: 'Progress' },
-          ]}
-        />
+        <div className="sort-stack">
+          <SortSelect
+            value={sort}
+            onChange={setSort}
+            options={[
+              { value: 'name', label: 'Name' },
+              { value: 'owner', label: 'Owner' },
+              { value: 'dueDate', label: 'Due date' },
+              { value: 'status', label: 'Status' },
+              { value: 'progress', label: 'Progress' },
+            ]}
+          />
+          <div className="sort-control">
+            <label>
+              Milestones
+              <select
+                value={msOrder}
+                onChange={(e) => setMsOrder(e.target.value as MilestoneOrder)}
+              >
+                <option value="added">Order added</option>
+                <option value="dueAsc">Due date, soonest first</option>
+                <option value="dueDesc">Due date, latest first</option>
+              </select>
+            </label>
+          </div>
+        </div>
       </div>
 
       <form
@@ -327,7 +364,7 @@ export function Rocks() {
       ) : (
         <div className="rock-grid">
           {rocks.map((r) => (
-            <RockCard key={r.id} rock={r} />
+            <RockCard key={r.id} rock={r} msOrder={msOrder} />
           ))}
         </div>
       )}
