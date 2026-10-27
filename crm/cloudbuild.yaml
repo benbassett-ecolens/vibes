@@ -1,0 +1,38 @@
+# Cloud Build: build the image, push to Artifact Registry, deploy to Cloud Run.
+# Trigger this from a push to main (Cloud Build trigger, "included files" = crm/**),
+# or run manually:  gcloud builds submit --config crm/cloudbuild.yaml .
+#
+# Substitutions (set defaults on the trigger or pass --substitutions):
+#   _REGION, _SERVICE, _REPO (Artifact Registry repo), _SQL_INSTANCE (project:region:instance)
+substitutions:
+  _REGION: us-central1
+  _SERVICE: ecolens-crm
+  _REPO: apps
+  _SQL_INSTANCE: ''
+steps:
+  - name: gcr.io/cloud-builders/docker
+    dir: crm
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:latest
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args: [push, --all-tags, '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}']
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+      - --region=${_REGION}
+      - --platform=managed
+      - --add-cloudsql-instances=${_SQL_INSTANCE}
+      - --quiet
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+options:
+  logging: CLOUD_LOGGING_ONLY
