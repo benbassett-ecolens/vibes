@@ -92,8 +92,8 @@ async function main() {
     const closedAt = spec.closedDaysAgo !== undefined ? daysAgo(Math.min(spec.closedDaysAgo, spec.createdDaysAgo - 1)) : null
     const ownerId = pick(userIds, i)
     const d = (await one<{ id: string }>(
-      `INSERT INTO deals (title, pipeline_id, stage_id, amount, company_id, contact_id, owner_id, expected_close_date, closed_at, lost_reason, created_by, created_at, stage_entered_at, last_activity_at, position, lead_source, deal_type, contract_months)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $7, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
+      `INSERT INTO deals (title, pipeline_id, stage_id, amount, company_id, contact_id, owner_id, expected_close_date, closed_at, lost_reason, created_by, created_at, stage_entered_at, last_activity_at, position, lead_source, deal_type, contract_months, contract_start_date)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $7, $11, $12, $13, $14, $15, $16, $17, $9::date) RETURNING id`,
       [`${companies[companyIdx][0]} – ${pick(dealTitles, i)}`, pipeline.id, spec.stage.id, spec.amount, companyIds[companyIdx], contactIds[i % contactIds.length], ownerId, daysAhead(10 + (i * 9) % 90).slice(0, 10), closedAt, spec.lostReason ?? null, createdAt, closedAt ?? daysAgo(Math.max(0, spec.createdDaysAgo - 3 - (i % 25))), i % 5 === 0 ? daysAgo(spec.createdDaysAgo - 1) : daysAgo(Math.max(0, i % 20)), i, pick(['Referral', 'Inbound', 'Event', 'Partner', 'Outbound'], i), i % 9 === 0 ? 'upsell' : 'new_business', spec.stage.id === won.id ? pick([12, 24, 36], i) : null],
     ))!
     // Stage history: walk through the stages up to the current one.

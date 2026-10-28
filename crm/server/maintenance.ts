@@ -2,8 +2,10 @@
 import { config } from './config.js'
 import { query } from './db.js'
 import { slackCall, slackConfigured, slackSafe } from './slack/client.js'
+import { createDueRenewals } from './routes/deals.js'
 
-export async function runMaintenance(): Promise<{ audit_purged: number; unmatched_purged: number; nudged: number }> {
+export async function runMaintenance(): Promise<{ audit_purged: number; unmatched_purged: number; nudged: number; renewals_created: number }> {
+  const renewalsCreated = await createDueRenewals()
   let auditPurged = 0
   if (config.auditRetentionMonths > 0) {
     const r = await query<{ id: number }>(`DELETE FROM audit_log WHERE created_at < now() - ($1 || ' months')::interval RETURNING id`, [String(config.auditRetentionMonths)])
@@ -25,5 +27,5 @@ export async function runMaintenance(): Promise<{ audit_purged: number; unmatche
       nudged++
     }
   }
-  return { audit_purged: auditPurged, unmatched_purged: u.length, nudged }
+  return { audit_purged: auditPurged, unmatched_purged: u.length, nudged, renewals_created: renewalsCreated }
 }

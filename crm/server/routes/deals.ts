@@ -4,6 +4,7 @@ import type pg from 'pg'
 import { audit, diff } from '../audit.js'
 import { one, query, withTransaction } from '../db.js'
 import { HttpError, badRequest, notFound, parse, parsePaging, parseSort, wrap } from '../http.js'
+import { config } from '../config.js'
 import type { Activity, AuditEntry, Deal, Stage, StageHistoryEntry, TimelineItem } from '../../shared/types.js'
 import { dealProductsRouter } from './products.js'
 import { postTaskCard, slackSafe } from '../slack/client.js'
@@ -25,6 +26,7 @@ const dealSchema = z.object({
   lead_source: z.string().trim().max(120).nullable().optional(),
   deal_type: z.enum(['new_business', 'renewal', 'upsell']).optional(),
   contract_months: z.number().int().min(1).max(240).nullable().optional(),
+  contract_start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   description: z.string().max(20000).nullable().optional(),
 })
 
@@ -67,6 +69,9 @@ export const DEAL_SELECT = `
     NULLIF(TRIM(CONCAT(ct.first_name, ' ', ct.last_name)), '') AS contact_name,
     ROUND(d.amount * s.probability / 100.0, 2) AS weighted_amount,
     (SELECT title FROM deals r WHERE r.id = d.renewal_of_deal_id) AS renewal_of_title,
+    (d.contract_start_date + (d.contract_months || ' months')::interval)::date AS contract_end_date,
+    CASE WHEN d.renewal_created_at IS NULL AND d.contract_months IS NOT NULL AND d.contract_start_date IS NOT NULL
+         THEN (d.contract_start_date + ${config.renewalLeadDays}) ELSE NULL END AS renewal_due_date,
     (SELECT r.id FROM deals r WHERE r.renewal_of_deal_id = d.id AND r.archived_at IS NULL ORDER BY r.created_at DESC LIMIT 1) AS renewal_deal_id,
     (SELECT COALESCE(SUM(CASE dp.pricing_type WHEN 'monthly' THEN dp.quantity * dp.unit_price * COALESCE(d.contract_months, 12)
                                               WHEN 'percent' THEN dp.basis_amount * dp.unit_price / 100
@@ -208,7 +213,7 @@ async function moveStage(
   deal: Deal,
   toStageId: string,
   actorId: string,
-  opts: { position?: number; lost_reason?: string | null; contract_months?: number | null } = {},
+  opts: { position?: number; lost_reason?: string | null; contract_months?: number | null; contract_start_date?: string | null } = {},
 ): Promise<void> {
   const to = await stageFor(toStageId, client)
   if (to.pipeline_id !== deal.pipeline_id) throw badRequest('Stage belongs to a different pipeline')
@@ -223,6 +228,8 @@ async function moveStage(
     if (opts.contract_months) await query('UPDATE deals SET contract_months = $2 WHERE id = $1', [deal.id, opts.contract_months], client)
     const months = opts.contract_months ?? deal.contract_months
     if (!months) throw new HttpError(400, 'Contract length is required to close a deal as won', { code: 'contract_months_required' })
+    // Contract starts on the close date unless told otherwise.
+    await query('UPDATE deals SET contract_start_date = COALESCE($2, contract_start_date, CURRENT_DATE) WHERE id = $1', [deal.id, opts.contract_start_date ?? null], client)
   }
   await query('UPDATE deal_stage_history SET exited_at = now() WHERE deal_id = $1 AND exited_at IS NULL', [deal.id], client)
   await query(
@@ -245,28 +252,28 @@ async function moveStage(
     changes: { stage: { from: from?.name ?? null, to: to.name }, ...(lostReason ? { lost_reason: { from: deal.lost_reason, to: lostReason } } : {}) },
     summary: `Moved from ${from?.name ?? '—'} to ${to.name}`,
   })
-  if (to.kind === 'won') await createRenewal(client, deal.id, actorId)
 }
 
 /**
- * When a deal closes won with a contract length, create the renewal deal: same company,
- * contact, owner and products; expected close = close date + contract length; a task to start
- * the renewal conversation 90 days before that. Created once per deal.
+ * Create the renewal deal for a won deal: same company, contact, owner and products;
+ * expected close = contract end (start + length); a task to start the renewal conversation
+ * 90 days before the end. Called by the maintenance job RENEWAL_LEAD_DAYS after contract start.
+ * Created once per deal.
  */
-async function createRenewal(client: pg.PoolClient, dealId: string, actorId: string): Promise<void> {
+export async function createRenewal(client: pg.PoolClient, dealId: string, actorId: string | null): Promise<string | null> {
   const d = await one<Deal>('SELECT * FROM deals WHERE id = $1', [dealId], client)
-  if (!d || !d.contract_months || d.renewal_created_at) return
+  if (!d || !d.contract_months || d.renewal_created_at || d.archived_at) return null
   const firstOpen = await one<Stage>("SELECT * FROM stages WHERE pipeline_id = $1 AND kind = 'open' ORDER BY position LIMIT 1", [d.pipeline_id], client)
-  if (!firstOpen) return
-  const closeDate = new Date(d.closed_at ?? new Date().toISOString())
-  const renewalClose = new Date(closeDate)
-  renewalClose.setMonth(renewalClose.getMonth() + d.contract_months)
+  if (!firstOpen) return null
+  const startDate = new Date(`${d.contract_start_date ?? (d.closed_at ?? new Date().toISOString()).slice(0, 10)}T00:00:00Z`)
+  const renewalClose = new Date(startDate)
+  renewalClose.setUTCMonth(renewalClose.getUTCMonth() + d.contract_months)
   const expected = renewalClose.toISOString().slice(0, 10)
   const title = d.title.replace(/\s*[–-]\s*Renewal( \d+)?$/i, '')
   const r = (await one<Deal>(
     `INSERT INTO deals (title, pipeline_id, stage_id, amount, currency, company_id, contact_id, owner_id, expected_close_date, lead_source, deal_type, contract_months, renewal_of_deal_id, description, created_by, position, amount_from_products)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Renewal', 'renewal', $10, $11, $12, $13, (SELECT COALESCE(MAX(position), 0) + 1 FROM deals WHERE stage_id = $3), $14) RETURNING *`,
-    [`${title} – Renewal`, d.pipeline_id, firstOpen.id, d.amount, d.currency, d.company_id, d.contact_id, d.owner_id, expected, d.contract_months, d.id, `Auto-created renewal of "${d.title}" (${d.contract_months}-month contract closed ${closeDate.toISOString().slice(0, 10)}).`, actorId, d.amount_from_products],
+    [`${title} – Renewal`, d.pipeline_id, firstOpen.id, d.amount, d.currency, d.company_id, d.contact_id, d.owner_id, expected, d.contract_months, d.id, `Auto-created renewal of "${d.title}" (${d.contract_months}-month contract starting ${startDate.toISOString().slice(0, 10)}, ending ${expected}).`, actorId ?? d.owner_id, d.amount_from_products],
     client,
   ))!
   await query(
@@ -277,18 +284,37 @@ async function createRenewal(client: pg.PoolClient, dealId: string, actorId: str
   )
   await query('INSERT INTO deal_stage_history (deal_id, from_stage_id, to_stage_id, changed_by) VALUES ($1, NULL, $2, $3)', [r.id, firstOpen.id, actorId], client)
   const due = new Date(renewalClose)
-  due.setDate(due.getDate() - 90)
+  due.setUTCDate(due.getUTCDate() - 90)
+  due.setUTCHours(16, 0, 0, 0)
   const dueAt = (due.getTime() < Date.now() + 86400e3 ? new Date(Date.now() + 7 * 86400e3) : due).toISOString()
   const task = (await one<{ id: string }>(
     `INSERT INTO activities (type, subject, deal_id, contact_id, company_id, owner_id, due_at, created_by)
      VALUES ('task', $1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-    [`Start renewal conversation (contract ends ${expected})`, r.id, r.contact_id, r.company_id, r.owner_id ?? actorId, dueAt, actorId],
+    [`Start renewal conversation (contract ends ${expected})`, r.id, r.contact_id, r.company_id, r.owner_id ?? actorId, dueAt, actorId ?? r.owner_id],
     client,
   ))!
   await query('UPDATE deals SET renewal_created_at = now() WHERE id = $1', [d.id], client)
-  await audit(client, { entityType: 'deal', entityId: r.id, action: 'create', actorId, changes: { renewal_of: d.title, expected_close_date: expected, contract_months: d.contract_months }, summary: `Renewal created automatically from ${d.title}` })
-  await audit(client, { entityType: 'deal', entityId: d.id, action: 'update', actorId, changes: { renewal_deal: { from: null, to: r.title } }, summary: `Renewal deal created (${expected})` })
+  await audit(client, { entityType: 'deal', entityId: r.id, action: 'create', actorId, changes: { renewal_of: d.title, expected_close_date: expected, contract_months: d.contract_months }, summary: `Renewal created automatically ${config.renewalLeadDays} days into the contract` })
+  await audit(client, { entityType: 'deal', entityId: d.id, action: 'update', actorId, changes: { renewal_deal: { from: null, to: r.title } }, summary: `Renewal deal created (expected close ${expected})` })
   slackSafe(postTaskCard(task.id))
+  return r.id
+}
+
+/** Won deals whose contract started RENEWAL_LEAD_DAYS ago or more and have no renewal yet. */
+export async function createDueRenewals(): Promise<number> {
+  const due = await query<{ id: string }>(
+    `SELECT d.id FROM deals d JOIN stages s ON s.id = d.stage_id
+     WHERE s.kind = 'won' AND d.archived_at IS NULL AND d.renewal_created_at IS NULL AND d.contract_months IS NOT NULL
+       AND d.contract_start_date IS NOT NULL AND d.contract_start_date + $1::int <= CURRENT_DATE
+     ORDER BY d.contract_start_date LIMIT 200`,
+    [config.renewalLeadDays],
+  )
+  let n = 0
+  for (const { id } of due) {
+    const created = await withTransaction((client) => createRenewal(client, id, null))
+    if (created) n++
+  }
+  return n
 }
 
 dealsRouter.post(
@@ -319,10 +345,10 @@ dealsRouter.post(
       const closedAt = stage.kind === 'open' ? null : new Date().toISOString()
       if (stage.kind === 'won' && !body.contract_months) throw new HttpError(400, 'Contract length is required to create a deal as won', { code: 'contract_months_required' })
       const d = (await one<Deal>(
-        `INSERT INTO deals (title, pipeline_id, stage_id, amount, currency, company_id, contact_id, owner_id, expected_close_date, lost_reason, lead_source, deal_type, contract_months, description, closed_at, created_by, position)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, (SELECT COALESCE(MAX(position), 0) + 1 FROM deals WHERE stage_id = $3))
+        `INSERT INTO deals (title, pipeline_id, stage_id, amount, currency, company_id, contact_id, owner_id, expected_close_date, lost_reason, lead_source, deal_type, contract_months, contract_start_date, description, closed_at, created_by, position)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, (SELECT COALESCE(MAX(position), 0) + 1 FROM deals WHERE stage_id = $3))
          RETURNING *`,
-        [body.title, pipelineId, stage.id, body.amount ?? 0, body.currency ?? 'USD', body.company_id, body.contact_id, body.owner_id ?? req.user.id, body.expected_close_date, body.lost_reason ?? null, body.lead_source, body.deal_type, body.contract_months ?? null, body.description ?? null, closedAt, req.user.id],
+        [body.title, pipelineId, stage.id, body.amount ?? 0, body.currency ?? 'USD', body.company_id, body.contact_id, body.owner_id ?? req.user.id, body.expected_close_date, body.lost_reason ?? null, body.lead_source, body.deal_type, body.contract_months ?? null, body.contract_start_date ?? (stage.kind === 'won' ? new Date().toISOString().slice(0, 10) : null), body.description ?? null, closedAt, req.user.id],
         client,
       ))!
       await query('INSERT INTO deal_stage_history (deal_id, from_stage_id, to_stage_id, changed_by) VALUES ($1, NULL, $2, $3)', [d.id, stage.id, req.user.id], client)
@@ -336,7 +362,6 @@ dealsRouter.post(
       ))!
       nextTaskId = task.id
       await audit(client, { entityType: 'activity', entityId: task.id, action: 'create', actorId: req.user.id, changes: { type: next_activity.type ?? 'task', subject: next_activity.subject, deal_id: d.id }, summary: `Scheduled next activity: ${next_activity.subject}` })
-      if (stage.kind === 'won') await createRenewal(client, d.id, req.user.id)
       return d
     })
     if (nextTaskId) slackSafe(postTaskCard(nextTaskId))
@@ -375,12 +400,12 @@ dealsRouter.patch(
       // Plain field update first; a stage change (below) then owns closed_at / lost_reason.
       const after = (await one<Deal>(
         `UPDATE deals SET title = $2, amount = CASE WHEN amount_from_products THEN amount ELSE $3 END, currency = $4, company_id = $5, contact_id = $6, owner_id = $7,
-           expected_close_date = $8, lost_reason = $9, description = $10, lead_source = $11, deal_type = $12, contract_months = $13
+           expected_close_date = $8, lost_reason = $9, description = $10, lead_source = $11, deal_type = $12, contract_months = $13, contract_start_date = $14
          WHERE id = $1 RETURNING *`,
-        [before.id, next.title, next.amount, next.currency, next.company_id, next.contact_id, next.owner_id, next.expected_close_date, next.lost_reason, next.description, next.lead_source, next.deal_type, next.contract_months],
+        [before.id, next.title, next.amount, next.currency, next.company_id, next.contact_id, next.owner_id, next.expected_close_date, next.lost_reason, next.description, next.lead_source, next.deal_type, next.contract_months, next.contract_start_date],
         client,
       ))!
-      const pick = (d: Deal) => ({ title: d.title, amount: d.amount, currency: d.currency, company_id: d.company_id, contact_id: d.contact_id, owner_id: d.owner_id, expected_close_date: d.expected_close_date, description: d.description, lost_reason: d.lost_reason, lead_source: d.lead_source, deal_type: d.deal_type, contract_months: d.contract_months })
+      const pick = (d: Deal) => ({ title: d.title, amount: d.amount, currency: d.currency, company_id: d.company_id, contact_id: d.contact_id, owner_id: d.owner_id, expected_close_date: d.expected_close_date, description: d.description, lost_reason: d.lost_reason, lead_source: d.lead_source, deal_type: d.deal_type, contract_months: d.contract_months, contract_start_date: d.contract_start_date })
       const fieldChanges = diff(pick(before), pick(after))
       const stageChanging = !(body.pipeline_id && body.pipeline_id !== before.pipeline_id) && !!body.stage_id && body.stage_id !== before.stage_id
       if (stageChanging) delete fieldChanges.lost_reason // recorded with the stage change below
@@ -389,7 +414,7 @@ dealsRouter.patch(
       }
       if (stageChanging) {
         const current = (await loadDeal(before.id, client))!
-        await moveStage(client, current, body.stage_id!, req.user.id, { lost_reason: body.lost_reason, contract_months: body.contract_months })
+        await moveStage(client, current, body.stage_id!, req.user.id, { lost_reason: body.lost_reason, contract_months: body.contract_months, contract_start_date: body.contract_start_date })
       }
     })
     res.json(await loadDeal(before.id))
@@ -402,10 +427,10 @@ dealsRouter.use('/:dealId/products', dealProductsRouter)
 dealsRouter.post(
   '/:id/move',
   wrap(async (req, res) => {
-    const body = parse(z.object({ stage_id: z.string().uuid(), position: z.number().optional(), lost_reason: z.string().trim().max(200).nullable().optional(), contract_months: z.number().int().min(1).max(240).nullable().optional() }), req.body)
+    const body = parse(z.object({ stage_id: z.string().uuid(), position: z.number().optional(), lost_reason: z.string().trim().max(200).nullable().optional(), contract_months: z.number().int().min(1).max(240).nullable().optional(), contract_start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }), req.body)
     const before = await loadDeal(req.params.id as string)
     if (!before) throw notFound('Deal')
-    await withTransaction((client) => moveStage(client, before, body.stage_id, req.user.id, { position: body.position, lost_reason: body.lost_reason, contract_months: body.contract_months }))
+    await withTransaction((client) => moveStage(client, before, body.stage_id, req.user.id, { position: body.position, lost_reason: body.lost_reason, contract_months: body.contract_months, contract_start_date: body.contract_start_date }))
     res.json(await loadDeal(before.id))
   }),
 )

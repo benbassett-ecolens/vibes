@@ -105,6 +105,9 @@ export interface Deal {
   amount_from_products: boolean
   deal_type: DealType
   contract_months: number | null
+  contract_start_date: string | null
+  contract_end_date?: string | null
+  renewal_due_date?: string | null
   renewal_of_deal_id: string | null
   renewal_of_title?: string | null
   renewal_deal_id?: string | null

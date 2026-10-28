@@ -25,7 +25,7 @@ enterprise sprawl is not.
 | **Products** | A product catalogue (one-time, monthly, or percent-of-basis pricing). Add lines to a deal and the deal amount becomes the sum of the lines; reports show revenue by product. |
 | **Required fields** | A deal cannot be created without a company, a main contact that has an email address, an expected close date, a lead source, a deal type (new business / renewal / upsell) and a scheduled next activity (date + description). Contract length is optional at creation and required to close won. |
 | **Flags** | Every open deal is checked for: close date overdue, overdue activity, no next step, rotting. Flags appear on board cards, in the list (with a filter), on the deal page, on the dashboard and in Reports. |
-| **Renewals** | Closing a deal won creates its renewal deal automatically: same company, contact, owner and products, expected close = close date + contract length, and a task 90 days before to start the renewal conversation. |
+| **Renewals** | Closing won records the contract start date (defaults to the close date). 45 days into the contract (`RENEWAL_LEAD_DAYS`) the scheduled job creates the renewal deal: same company, contact, owner and products, expected close = contract end date, and a task 90 days before the end to start the renewal conversation. |
 | **Users & roles** | Anyone with an `@ecolens.io` Workspace account is created on first sign-in as a member. Admins (seeded from `ADMIN_EMAILS`, or promoted in Settings) manage pipelines, stages, lost reasons and users, and can deactivate accounts. |
 
 ## The login gate
@@ -139,7 +139,7 @@ crm/
     maintenance.ts retention purges + Slack due-now nudges
     migrate.ts     forward-only SQL migrator (runs on boot)
     seed.ts        demo data for local development
-  migrations/      001 schema · 002 Google sync · 003 products, Slack · 004 deal type, contract, renewals
+  migrations/      001 schema · 002 Google sync · 003 products, Slack · 004 deal type, contract, renewals · 005 contract start
   shared/types.ts  API types shared by server and client
   src/             React 18 + Vite + react-router + recharts
     pages/         Dashboard, Deals (board + list), DealDetail, Contacts, ContactDetail,
@@ -225,6 +225,7 @@ revisions.
 | `SYNC_INTERVAL_MINUTES` | Optional in-process sync timer (needs `min-instances=1`) |
 | `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET` | Enable Slack to-do sync |
 | `AUDIT_RETENTION_MONTHS`, `UNMATCHED_RETENTION_DAYS` | Retention (12 months / 90 days by default) |
+| `RENEWAL_LEAD_DAYS` | Days after contract start at which the renewal deal is created (45) |
 
 ## API sketch
 
@@ -241,7 +242,7 @@ GET/POST /api/companies   GET/PATCH /api/companies/:id   POST /api/companies/:id
 GET/POST /api/contacts    GET/PATCH /api/contacts/:id    POST /api/contacts/:id/archive
 GET/POST /api/deals       GET /api/deals/board?pipeline_id=…   GET/PATCH/DELETE /api/deals/:id
    list filters: q, owner_id, stage_id, status, deal_type, flag=close_overdue|activity_overdue|no_next_step|rotting
-POST /api/deals/:id/move {stage_id, position, lost_reason, contract_months}     GET /api/deals/:id/timeline
+POST /api/deals/:id/move {stage_id, position, lost_reason, contract_months, contract_start_date}     GET /api/deals/:id/timeline
 GET/POST /api/activities  PATCH/DELETE /api/activities/:id ({completed: true} marks done)
 GET  /api/audit?entity_type&entity_id&actor_id
 GET/POST/PATCH/DELETE /api/deals/:id/products[/:lineId]

@@ -25,11 +25,12 @@ export function DealDetail() {
   const [lostReason, setLostReason] = useState('')
   const [wonFor, setWonFor] = useState<string | null>(null)
   const [contractMonths, setContractMonths] = useState('12')
+  const [contractStart, setContractStart] = useState(new Date().toISOString().slice(0, 10))
   const d = deal.data
   const pipeline = pipelines.find((p) => p.id === d?.pipeline_id)
   const refreshAll = () => { deal.refresh(); timeline.refresh() }
 
-  const moveTo = async (stageId: string, lost_reason?: string, contract_months?: number) => {
+  const moveTo = async (stageId: string, lost_reason?: string, contract_months?: number, contract_start_date?: string) => {
     const stage = pipeline?.stages.find((s) => s.id === stageId)
     if (!stage || !d) return
     if (stage.kind === 'lost' && lost_reason === undefined) {
@@ -43,8 +44,8 @@ export function DealDetail() {
       return
     }
     try {
-      await api.post(`/api/deals/${d.id}/move`, { stage_id: stageId, lost_reason, contract_months })
-      toast(stage.kind === 'won' ? 'Closed won. Renewal deal created.' : `Moved to ${stage.name}`)
+      await api.post(`/api/deals/${d.id}/move`, { stage_id: stageId, lost_reason, contract_months, contract_start_date })
+      toast(stage.kind === 'won' ? 'Closed won. The renewal deal will be created 45 days into the contract.' : `Moved to ${stage.name}`)
       refreshAll()
     } catch (e) {
       if (e instanceof ApiError && (e.details as { code?: string } | undefined)?.code === 'contract_months_required') {
@@ -158,8 +159,9 @@ export function DealDetail() {
                   <dt>First-year value</dt><dd><strong>{money(d.amount, d.currency)}</strong> <span className="muted small">· {money(d.weighted_amount, d.currency)} weighted at {d.probability}%{d.amount_from_products ? ' · from products' : ''}</span></dd>
                   <dt>Contract value</dt><dd>{d.amount_from_products && d.contract_value ? <>{money(d.contract_value, d.currency)} <span className="muted small">over {d.contract_months ?? 12} months</span></> : <span className="muted">add products{d.contract_months ? '' : ' and a contract length'}</span>}</dd>
                   <dt>Deal type</dt><dd>{DEAL_TYPE_LABEL[d.deal_type]}{d.renewal_of_deal_id && <span className="muted small"> · renewal of <Link to={`/deals/${d.renewal_of_deal_id}`}>{d.renewal_of_title}</Link></span>}</dd>
-                  <dt>Contract length</dt><dd>{d.contract_months ? `${d.contract_months} months` : <span className="muted">not set (required to close won)</span>}</dd>
+                  <dt>Contract</dt><dd>{d.contract_months ? <>{d.contract_months} months{d.contract_start_date && <span className="muted small"> · {fmtDate(d.contract_start_date)} → {fmtDate(d.contract_end_date)}</span>}</> : <span className="muted">length not set (required to close won)</span>}</dd>
                   {d.renewal_deal_id && <><dt>Renewal</dt><dd><Link to={`/deals/${d.renewal_deal_id}`}>Renewal deal →</Link> <span className="muted small">created {fmtDate(d.renewal_created_at)}</span></dd></>}
+                  {!d.renewal_deal_id && d.renewal_due_date && d.stage_kind === 'won' && <><dt>Renewal</dt><dd><span className="muted small">will be created {fmtDate(d.renewal_due_date)} (45 days into the contract), expected close {fmtDate(d.contract_end_date)}</span></dd></>}
                   <dt>Company</dt><dd>{d.company_id ? <Link to={`/companies/${d.company_id}`}>{d.company_name}</Link> : '—'}</dd>
                   <dt>Contact</dt><dd>{d.contact_id ? <Link to={`/contacts/${d.contact_id}`}>{d.contact_name}</Link> : '—'}</dd>
                   <dt>Owner</dt><dd className="row"><Avatar name={d.owner_name} /> {d.owner_name ?? 'Unassigned'}</dd>
@@ -191,11 +193,14 @@ export function DealDetail() {
       {editing && <DealForm initial={d} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refreshAll() }} />}
       {wonFor && (
         <Modal title="Close as won" onClose={() => setWonFor(null)} width={420}>
-          <p className="small muted" style={{ marginBottom: 10 }}>Contract length is required to close won. A renewal deal will be created automatically, due when this contract ends, with a task 90 days before.</p>
-          <Field label="Contract length (months)"><input className="input" type="number" min={1} max={240} autoFocus value={contractMonths} onChange={(e) => setContractMonths(e.target.value)} /></Field>
+          <p className="small muted" style={{ marginBottom: 10 }}>Contract length is required to close won. The renewal deal is created automatically 45 days after the contract starts, with its expected close set to the contract end date.</p>
+          <div className="form-grid">
+            <Field label="Contract length (months)"><input className="input" type="number" min={1} max={240} autoFocus value={contractMonths} onChange={(e) => setContractMonths(e.target.value)} /></Field>
+            <Field label="Contract start date"><input className="input" type="date" value={contractStart} onChange={(e) => setContractStart(e.target.value)} /></Field>
+          </div>
           <div className="form-actions">
             <button className="btn" onClick={() => setWonFor(null)}>Cancel</button>
-            <button className="btn primary" disabled={!Number(contractMonths)} onClick={() => { const s = wonFor; setWonFor(null); moveTo(s, undefined, Number(contractMonths)) }}>Close won</button>
+            <button className="btn primary" disabled={!Number(contractMonths) || !contractStart} onClick={() => { const s = wonFor; setWonFor(null); moveTo(s, undefined, Number(contractMonths), contractStart) }}>Close won</button>
           </div>
         </Modal>
       )}

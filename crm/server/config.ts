@@ -35,6 +35,8 @@ export const config = {
   slackSigningSecret: env.SLACK_SIGNING_SECRET ?? '',
   // Audit rows older than this are purged by the maintenance job. 0 = keep forever.
   auditRetentionMonths: int('AUDIT_RETENTION_MONTHS', 12),
+  // Days after a won deal's contract start at which its renewal deal is created.
+  renewalLeadDays: int('RENEWAL_LEAD_DAYS', 45),
   // Unmatched sync items older than this are purged.
   unmatchedRetentionDays: int('UNMATCHED_RETENTION_DAYS', 90),
   allowedDomain: (env.ALLOWED_DOMAIN ?? 'ecolens.io').toLowerCase(),

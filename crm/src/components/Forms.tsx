@@ -29,6 +29,7 @@ export function DealForm({ initial, onClose, onSaved, defaults }: { initial?: De
     lead_source: base?.lead_source ?? '',
     deal_type: base?.deal_type ?? 'new_business',
     contract_months: base?.contract_months?.toString() ?? '',
+    contract_start_date: base?.contract_start_date ?? '',
     description: base?.description ?? '',
     contact_email: null as string | null,
     next_subject: '',
@@ -66,6 +67,7 @@ export function DealForm({ initial, onClose, onSaved, defaults }: { initial?: De
         lead_source: form.lead_source.trim(),
         deal_type: form.deal_type,
         contract_months: form.contract_months === '' ? null : Number(form.contract_months),
+        contract_start_date: form.contract_start_date || null,
         description: form.description || null,
         ...(initial ? {} : { next_activity: { subject: form.next_subject.trim(), due_at: fromLocalInputDateTime(form.next_due), type: form.next_type } }),
       }
@@ -111,6 +113,7 @@ export function DealForm({ initial, onClose, onSaved, defaults }: { initial?: De
             </select>
           </Field>
           <Field label="Contract length (months)"><input className="input" type="number" min={1} max={240} placeholder="required to close won" value={form.contract_months} onChange={(e) => set({ contract_months: e.target.value })} /></Field>
+          <Field label="Contract start date"><input className="input" type="date" value={form.contract_start_date} onChange={(e) => set({ contract_start_date: e.target.value })} /></Field>
           {!initial && (
             <>
               <Field label="Next activity *" span2>

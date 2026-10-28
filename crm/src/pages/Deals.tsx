@@ -124,9 +124,10 @@ export function Kanban({ pipelineId, filters }: { pipelineId: string; filters: R
   const [lostPrompt, setLostPrompt] = useState<{ deal: Deal; stage: Stage; position: number } | null>(null)
   const [wonPrompt, setWonPrompt] = useState<{ deal: Deal; stage: Stage; position: number } | null>(null)
   const [contractMonths, setContractMonths] = useState('12')
+  const [contractStart, setContractStart] = useState(new Date().toISOString().slice(0, 10))
   const [hideClosed, setHideClosed] = useLocalStorage('crm.board.hideClosed', false)
 
-  const move = async (dealId: string, stage: Stage, position: number, lost_reason?: string, contract_months?: number) => {
+  const move = async (dealId: string, stage: Stage, position: number, lost_reason?: string, contract_months?: number, contract_start_date?: string) => {
     setDragId(null)
     const deal = data?.items.find((d) => d.id === dealId)
     if (!deal) return
@@ -142,8 +143,8 @@ export function Kanban({ pipelineId, filters }: { pipelineId: string; filters: R
     // Optimistic update.
     setData({ items: (data?.items ?? []).map((d) => (d.id === dealId ? { ...d, stage_id: stage.id, stage_name: stage.name, stage_kind: stage.kind, position, probability: stage.probability, weighted_amount: Math.round(d.amount * stage.probability) / 100, stage_entered_at: d.stage_id === stage.id ? d.stage_entered_at : new Date().toISOString() } : d)) })
     try {
-      await api.post(`/api/deals/${dealId}/move`, { stage_id: stage.id, position, lost_reason, contract_months })
-      if (deal.stage_id !== stage.id) toast(stage.kind === 'won' ? 'Closed won. Renewal deal created.' : `Moved to ${stage.name}`)
+      await api.post(`/api/deals/${dealId}/move`, { stage_id: stage.id, position, lost_reason, contract_months, contract_start_date })
+      if (deal.stage_id !== stage.id) toast(stage.kind === 'won' ? 'Closed won. Renewal deal will be created 45 days into the contract.' : `Moved to ${stage.name}`)
     } catch (e) {
       if (e instanceof ApiError && (e.details as { code?: string } | undefined)?.code === 'contract_months_required') {
         setContractMonths('12')
@@ -173,11 +174,14 @@ export function Kanban({ pipelineId, filters }: { pipelineId: string; filters: R
       </div>
       {wonPrompt && (
         <Modal title={`Close "${wonPrompt.deal.title}" as won`} onClose={() => { setWonPrompt(null); refresh() }} width={420}>
-          <p className="small muted" style={{ marginBottom: 10 }}>Contract length is required to close won. A renewal deal is created automatically for when the contract ends.</p>
-          <Field label="Contract length (months)"><input className="input" type="number" min={1} max={240} autoFocus value={contractMonths} onChange={(e) => setContractMonths(e.target.value)} /></Field>
+          <p className="small muted" style={{ marginBottom: 10 }}>Contract length is required to close won. The renewal deal is created 45 days after the contract starts, with expected close = contract end.</p>
+          <div className="form-grid">
+            <Field label="Contract length (months)"><input className="input" type="number" min={1} max={240} autoFocus value={contractMonths} onChange={(e) => setContractMonths(e.target.value)} /></Field>
+            <Field label="Contract start date"><input className="input" type="date" value={contractStart} onChange={(e) => setContractStart(e.target.value)} /></Field>
+          </div>
           <div className="form-actions">
             <button className="btn" onClick={() => { setWonPrompt(null); refresh() }}>Cancel</button>
-            <button className="btn primary" disabled={!Number(contractMonths)} onClick={() => { const p = wonPrompt; setWonPrompt(null); move(p.deal.id, p.stage, p.position, undefined, Number(contractMonths)) }}>Close won</button>
+            <button className="btn primary" disabled={!Number(contractMonths) || !contractStart} onClick={() => { const p = wonPrompt; setWonPrompt(null); move(p.deal.id, p.stage, p.position, undefined, Number(contractMonths), contractStart) }}>Close won</button>
           </div>
         </Modal>
       )}
