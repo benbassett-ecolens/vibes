@@ -187,10 +187,22 @@ Copy the client ID; it becomes `GOOGLE_CLIENT_ID`.
 
 ### 2. Provision and deploy
 
+Easiest from **Cloud Shell** (the terminal icon in the GCP console; `gcloud` is already signed in):
+
 ```bash
-PROJECT_ID=your-gcp-project GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com \
+git clone https://github.com/benbassett-ecolens/vibes.git && cd vibes/crm
+read -rsp 'Google client secret: ' GOOGLE_CLIENT_SECRET; echo
+read -rsp 'Slack bot token (blank to skip): ' SLACK_BOT_TOKEN; echo
+read -rsp 'Slack signing secret (blank to skip): ' SLACK_SIGNING_SECRET; echo
+export GOOGLE_CLIENT_SECRET SLACK_BOT_TOKEN SLACK_SIGNING_SECRET
+PROJECT_ID=ecolens-crm REGION=us-central1 \
+  GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com \
   ADMIN_EMAILS=ben@ecolens.io DOMAIN=crm.ecolens.io ./deploy/setup-gcp.sh
 ```
+
+`read -rsp` prompts without echoing, so secrets never land in shell history. The script is safe to
+re-run; it prints a fix when the organization policy blocks public Cloud Run services and skips the
+custom domain until `gcloud domains verify ecolens.io` has been completed.
 
 The script enables APIs, creates an Artifact Registry repo, a Cloud SQL Postgres 16 instance
 (`db-f1-micro`, auto-backups), the database and user, stores the DB password and a session

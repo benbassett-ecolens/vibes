@@ -28,7 +28,8 @@ gcloud config set project "$PROJECT_ID" >/dev/null
 
 echo "▶ Enabling APIs"
 gcloud services enable run.googleapis.com sqladmin.googleapis.com secretmanager.googleapis.com \
-  artifactregistry.googleapis.com cloudbuild.googleapis.com >/dev/null
+  artifactregistry.googleapis.com cloudbuild.googleapis.com compute.googleapis.com cloudscheduler.googleapis.com \
+  gmail.googleapis.com calendar-json.googleapis.com >/dev/null
 
 echo "▶ Artifact Registry repo: $REPO"
 gcloud artifacts repositories describe "$REPO" --location="$REGION" >/dev/null 2>&1 || \
@@ -67,6 +68,10 @@ gcloud secrets describe crm-sync-secret >/dev/null 2>&1 || upsert_secret crm-syn
 
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 RUN_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+# New projects run Cloud Build as the compute service account, which needs these to build and push.
+for role in roles/logging.logWriter roles/artifactregistry.writer roles/storage.objectViewer; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$RUN_SA" --role="$role" --condition=None >/dev/null
+done
 SECRET_BINDINGS="DB_PASSWORD=crm-db-password:latest,SESSION_SECRET=crm-session-secret:latest,SYNC_SECRET=crm-sync-secret:latest"
 for s in crm-db-password crm-session-secret crm-sync-secret; do
   gcloud secrets add-iam-policy-binding "$s" --member="serviceAccount:$RUN_SA" --role=roles/secretmanager.secretAccessor >/dev/null
@@ -78,7 +83,7 @@ for pair in "crm-google-client-secret:GOOGLE_CLIENT_SECRET" "crm-slack-bot-token
     SECRET_BINDINGS="$SECRET_BINDINGS,$var=$name:latest"
   fi
 done
-gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$RUN_SA" --role=roles/cloudsql.client >/dev/null
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$RUN_SA" --role=roles/cloudsql.client --condition=None >/dev/null
 
 echo "▶ Building and pushing image"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:$(git rev-parse --short HEAD 2>/dev/null || date +%s)"
@@ -92,6 +97,22 @@ gcloud run deploy "$SERVICE" --image="$IMAGE" --region="$REGION" --platform=mana
   --set-secrets="$SECRET_BINDINGS" \
   --min-instances=0 --max-instances=3 --memory=512Mi --cpu=1 --port=8080
 
+# The app enforces @ecolens.io sign-in itself, so the service must be reachable without a Google IAM check.
+# Organizations created recently enforce "domain restricted sharing", which blocks allUsers; detect and explain.
+if ! gcloud run services add-iam-policy-binding "$SERVICE" --region="$REGION" --member=allUsers --role=roles/run.invoker >/dev/null 2>&1; then
+  cat <<MSG
+
+!! Could not make the service publicly reachable. Your organization's policy
+   "constraints/iam.allowedPolicyMemberDomains" blocks allUsers. An Organization
+   Policy Administrator can allow it for this project only:
+
+     gcloud org-policies reset constraints/iam.allowedPolicyMemberDomains --project=$PROJECT_ID
+
+   then re-run this script. (The CRM still requires an @${ALLOWED_DOMAIN} Google sign-in.)
+
+MSG
+fi
+
 echo "▶ Cloud Scheduler: Gmail/Calendar sync + maintenance every '$SYNC_SCHEDULE'"
 gcloud services enable cloudscheduler.googleapis.com >/dev/null
 SERVICE_URL="$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
@@ -103,11 +124,23 @@ else
 fi
 
 echo "▶ Custom domain: $DOMAIN"
-gcloud beta run domain-mappings describe --domain="$DOMAIN" --region="$REGION" >/dev/null 2>&1 || \
-  gcloud beta run domain-mappings create --service="$SERVICE" --domain="$DOMAIN" --region="$REGION"
-echo
-echo "Add this DNS record at your DNS provider (then wait for the managed certificate):"
-gcloud beta run domain-mappings describe --domain="$DOMAIN" --region="$REGION" --format='value(status.resourceRecords)'
+ROOT_DOMAIN="$(echo "$DOMAIN" | awk -F. '{print $(NF-1)"."$NF}')"
+if gcloud domains list-user-verified --format='value(id)' 2>/dev/null | grep -qx "$ROOT_DOMAIN"; then
+  gcloud beta run domain-mappings describe --domain="$DOMAIN" --region="$REGION" >/dev/null 2>&1 || \
+    gcloud beta run domain-mappings create --service="$SERVICE" --domain="$DOMAIN" --region="$REGION"
+  echo
+  echo "Add this DNS record at your DNS provider (then wait for the managed certificate):"
+  gcloud beta run domain-mappings describe --domain="$DOMAIN" --region="$REGION" --format='value(status.resourceRecords)'
+else
+  cat <<MSG
+
+!! $ROOT_DOMAIN is not yet verified for your Google account, so the custom domain was skipped.
+   Run:  gcloud domains verify $ROOT_DOMAIN
+   It opens Search Console with a TXT record to add at your DNS provider. Once verified, re-run this script;
+   it will create the mapping and print the DNS record for $DOMAIN. The service works at the run.app URL meanwhile.
+
+MSG
+fi
 echo
 echo "Service URL: $(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
 echo "Remember to add https://${DOMAIN} (and the run.app URL) to the OAuth client's Authorized JavaScript origins,"
