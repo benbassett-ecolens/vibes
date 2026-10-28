@@ -117,6 +117,29 @@ $53,000 in year one, and $113,000 over a 36-month contract (shown on the deal pa
 length is set). Core ERP SQL and Core ERP Closed Won % are entered as dollar values per deal. Once
 a deal has any line, its amount is derived from the lines and the Amount field becomes read-only.
 
+## Importing deals
+
+Settings → **Import deals from CSV** (admins). Export the pipeline sheet with File → Download →
+CSV and upload it. Columns are matched by header name; the Ecolens pipeline sheet's columns
+(Director/CPM, Prospect Name, Function, Ecolens BU, ISV/VAR/Other, Ecosystem, Retainer ACV,
+Performance ACV, Total Contract Value, Deal Stage, Close Date, Notes) all map automatically, as do
+generic ones (owner, company, stage, close date, amount, notes, contact name/email, lead source,
+deal type, contract length). The preview shows owners that need an email (a placeholder user is
+created and claimed on their first Google sign-in), stages that need mapping, and problem rows.
+Retainer ACV becomes the monthly retainer product at ACV ÷ 12 per month (EcoNet or AI products when
+the BU says so), Performance ACV becomes Core ERP Closed Won %, closed deals are dated by their close
+date, and re-importing skips deals whose title already exists.
+
+## Stages
+
+A fresh deployment starts with Ecolens's stages: Cold Prospect 5%, Introduction Made 10%, Demo of
+Ecolens 30%, Proposal 50%, Contract Sent 80%, Closed Won, Closed Lost, Deferred 10% (forecast
+"omitted"). Edit names, probabilities, rot limits and order in Settings.
+
+## Dark mode
+
+The sidebar has Light / Auto / Dark. Auto follows the operating system. The choice is per browser.
+
 ## Retention
 
 `AUDIT_RETENTION_MONTHS` (default 12) purges `audit_log` rows older than that on each scheduled

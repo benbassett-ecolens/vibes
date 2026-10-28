@@ -184,7 +184,7 @@ reportsRouter.get(
 
     const rate = winRate(closed.won_n, closed.lost_n)
     const avgDeal = closed.won_n ? closed.won_v / closed.won_n : null
-    const avgCycle = closed.avg_cycle === null ? null : Number(closed.avg_cycle)
+    const avgCycle = closed.avg_cycle === null || Number(closed.avg_cycle) <= 0 ? null : Number(closed.avg_cycle)
 
     const out: ReportSummary = {
       open_deals: open.n,

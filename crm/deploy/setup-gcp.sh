@@ -15,6 +15,9 @@ SQL_TIER="${SQL_TIER:-db-f1-micro}"          # fine for a small team; bump to db
 DB_NAME="${DB_NAME:-crm}"
 DB_USER="${DB_USER:-crm}"
 DOMAIN="${DOMAIN:-crm.ecolens.io}"
+# Public origin the app uses for OAuth callbacks and Slack links. Defaults to the custom domain;
+# set it to the run.app URL while DNS is not live yet, then re-run without it.
+APP_BASE_URL="${APP_BASE_URL:-https://$DOMAIN}"
 ALLOWED_DOMAIN="${ALLOWED_DOMAIN:-ecolens.io}"
 ADMIN_EMAILS="${ADMIN_EMAILS:-ben@ecolens.io}"
 GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-}"      # create under APIs & Services > Credentials (see README)
@@ -93,7 +96,7 @@ echo "▶ Deploying Cloud Run service: $SERVICE"
 gcloud run deploy "$SERVICE" --image="$IMAGE" --region="$REGION" --platform=managed \
   --allow-unauthenticated \
   --add-cloudsql-instances="$CONNECTION_NAME" \
-  --set-env-vars="NODE_ENV=production,CLOUD_SQL_CONNECTION_NAME=${CONNECTION_NAME},DB_USER=${DB_USER},DB_NAME=${DB_NAME},ALLOWED_DOMAIN=${ALLOWED_DOMAIN},ADMIN_EMAILS=${ADMIN_EMAILS},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},APP_BASE_URL=https://${DOMAIN},AUDIT_RETENTION_MONTHS=${AUDIT_RETENTION_MONTHS}" \
+  --set-env-vars="NODE_ENV=production,CLOUD_SQL_CONNECTION_NAME=${CONNECTION_NAME},DB_USER=${DB_USER},DB_NAME=${DB_NAME},ALLOWED_DOMAIN=${ALLOWED_DOMAIN},ADMIN_EMAILS=${ADMIN_EMAILS},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},APP_BASE_URL=${APP_BASE_URL},AUDIT_RETENTION_MONTHS=${AUDIT_RETENTION_MONTHS}" \
   --set-secrets="$SECRET_BINDINGS" \
   --min-instances=0 --max-instances=3 --memory=512Mi --cpu=1 --port=8080
 
@@ -152,6 +155,7 @@ MSG
 fi
 echo
 echo "Service URL: $(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
-echo "Remember to add https://${DOMAIN} (and the run.app URL) to the OAuth client's Authorized JavaScript origins,"
-echo "and https://${DOMAIN}/api/google/callback to its Authorized redirect URIs (Gmail/Calendar sync)."
-echo "Slack app URLs: interactivity https://${DOMAIN}/api/slack/webhooks/interactions, slash command https://${DOMAIN}/api/slack/webhooks/commands"
+echo "App base URL in use: ${APP_BASE_URL}"
+echo "OAuth client must list ${APP_BASE_URL} under Authorized JavaScript origins and"
+echo "${APP_BASE_URL}/api/google/callback under Authorized redirect URIs (Gmail/Calendar sync)."
+echo "Slack app URLs: interactivity ${APP_BASE_URL}/api/slack/webhooks/interactions, slash command ${APP_BASE_URL}/api/slack/webhooks/commands"

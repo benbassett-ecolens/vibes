@@ -2,6 +2,8 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, LoginPage, useAuth } from './auth'
 import { Avatar, ToastProvider } from './components/ui'
 import { RefProvider } from './refdata'
+import { useEffect } from 'react'
+import { useLocalStorage } from './hooks'
 import { Dashboard } from './pages/Dashboard'
 import { DealsPage } from './pages/Deals'
 import { DealDetail } from './pages/DealDetail'
@@ -23,8 +25,34 @@ const NAV = [
   { to: '/settings', label: 'Settings', ico: '⚙' },
 ]
 
+type Theme = 'system' | 'light' | 'dark'
+
+function useTheme(): [Theme, (t: Theme) => void] {
+  const [theme, setTheme] = useLocalStorage<Theme>('crm.theme', 'system')
+  useEffect(() => {
+    const root = document.documentElement
+    if (theme === 'system') root.removeAttribute('data-theme')
+    else root.setAttribute('data-theme', theme)
+  }, [theme])
+  return [theme, setTheme]
+}
+
+function ThemeToggle() {
+  const [theme, setTheme] = useTheme()
+  return (
+    <div className="theme-toggle" role="radiogroup" aria-label="Theme">
+      {(['light', 'system', 'dark'] as Theme[]).map((t) => (
+        <button key={t} className={theme === t ? 'active' : ''} onClick={() => setTheme(t)} aria-checked={theme === t} role="radio" title={`${t} theme`}>
+          {t === 'light' ? '☀ Light' : t === 'dark' ? '☾ Dark' : 'Auto'}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function Shell() {
   const { user, loading, logout } = useAuth()
+  useTheme()
   if (loading) return <div className="login"><div className="muted">Loading…</div></div>
   if (!user) return <LoginPage />
   return (
@@ -41,6 +69,7 @@ function Shell() {
             ))}
           </nav>
           <div className="spacer" />
+          <ThemeToggle />
           <div className="me">
             <Avatar name={user.name} src={user.picture_url} />
             <div className="txt grow">

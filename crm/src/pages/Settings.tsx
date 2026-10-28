@@ -6,6 +6,7 @@ import { useRefData } from '../refdata'
 import { Avatar, ConfirmButton, Field, Modal, useToast } from '../components/ui'
 import type { Pipeline, Product, Stage, User } from '../../shared/types'
 import { GoogleCard, SlackCard } from '../components/Integrations'
+import { ImportCard } from '../components/ImportCard'
 import { PRICING_LABEL } from '../../shared/pricing'
 import { useQuery } from '../hooks'
 
@@ -224,6 +225,7 @@ export function SettingsPage() {
         </div>
 
         <ProductsCard isAdmin={isAdmin} />
+        {isAdmin && <ImportCard />}
 
         <div className="grid c2">
           <div className="card">

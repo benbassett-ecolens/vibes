@@ -33,7 +33,7 @@ export function ReportsPage() {
   const [to, setTo] = useState(isoDaysAgo(0))
   const { data: s, error, loading } = useQuery(() => api.get<ReportSummary>(`/api/reports/summary${qs({ pipeline_id: pipelineId, owner_id: owner, from, to })}`), [pipelineId, owner, from, to])
   const preset = (days: number) => { setFrom(isoDaysAgo(days)); setTo(isoDaysAgo(0)) }
-  const tipStyle = { fontSize: 12, borderRadius: 8, border: '1px solid var(--border)' }
+  const tipStyle = { fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' }
 
   return (
     <>
@@ -78,8 +78,8 @@ export function ReportsPage() {
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart data={s.by_stage.filter((r) => r.stage_kind === 'open')} margin={{ top: 8, right: 8, left: 8, bottom: 0 }} barCategoryGap="30%">
                     <CartesianGrid vertical={false} stroke="var(--grid)" />
-                    <XAxis dataKey="stage_name" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={(v: number) => compactMoney(v)} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={56} />
+                    <XAxis dataKey="stage_name" tick={{ fontSize: 12, fill: 'var(--text-2)' }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={(v: number) => compactMoney(v)} tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} width={56} />
                     <Tooltip contentStyle={tipStyle} formatter={(v: number, name: string) => [money(v), name === 'total_amount' ? 'Total' : 'Weighted']} />
                     <Legend wrapperStyle={{ fontSize: 12 }} formatter={(v: string) => (v === 'total_amount' ? 'Total' : 'Weighted')} />
                     <Bar dataKey="total_amount" fill={SERIES.s1} radius={[4, 4, 0, 0]} maxBarSize={48} />
@@ -102,8 +102,8 @@ export function ReportsPage() {
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart data={s.won_by_month.map((m) => ({ ...m, label: monthLabel(m.month) }))} margin={{ top: 8, right: 8, left: 8, bottom: 0 }} barCategoryGap="30%">
                     <CartesianGrid vertical={false} stroke="var(--grid)" />
-                    <XAxis dataKey="label" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={(v: number) => compactMoney(v)} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={56} />
+                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: 'var(--text-2)' }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={(v: number) => compactMoney(v)} tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} width={56} />
                     <Tooltip contentStyle={tipStyle} formatter={(v: number, name: string) => [money(v), name === 'won_amount' ? 'Won' : 'Lost']} />
                     <Legend wrapperStyle={{ fontSize: 12 }} formatter={(v: string) => (v === 'won_amount' ? 'Won' : 'Lost')} />
                     <Bar dataKey="won_amount" fill={SERIES.won} radius={[4, 4, 0, 0]} maxBarSize={40} />
