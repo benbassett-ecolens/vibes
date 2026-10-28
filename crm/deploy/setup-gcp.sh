@@ -104,11 +104,20 @@ if ! gcloud run services add-iam-policy-binding "$SERVICE" --region="$REGION" --
 
 !! Could not make the service publicly reachable. Your organization's policy
    "constraints/iam.allowedPolicyMemberDomains" blocks allUsers. An Organization
-   Policy Administrator can allow it for this project only:
+   Policy Administrator can allow it for this project only (a reset is NOT enough on
+   newer organizations; the managed default is the restriction):
 
-     gcloud org-policies reset constraints/iam.allowedPolicyMemberDomains --project=$PROJECT_ID
+     cat > /tmp/allow-public.yaml <<YAML
+     name: projects/$PROJECT_ID/policies/iam.allowedPolicyMemberDomains
+     spec:
+       rules:
+         - allowAll: true
+     YAML
+     gcloud org-policies set-policy /tmp/allow-public.yaml
+     sleep 90
+     gcloud run services add-iam-policy-binding $SERVICE --region=$REGION --member=allUsers --role=roles/run.invoker
 
-   then re-run this script. (The CRM still requires an @${ALLOWED_DOMAIN} Google sign-in.)
+   (The CRM still requires an @${ALLOWED_DOMAIN} Google sign-in.)
 
 MSG
 fi
