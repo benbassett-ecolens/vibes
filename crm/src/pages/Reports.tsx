@@ -206,6 +206,18 @@ export function ReportsPage() {
               </div>
             </div>
 
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div className="card-h"><h2>Revenue by product</h2><span className="muted small right">line totals on open deals now, and on deals won in range</span></div>
+              <table className="table">
+                <thead><tr><th>Product</th><th>Pricing</th><th className="num">Open deals</th><th className="num">Open value</th><th className="num">Won deals</th><th className="num">Won value</th></tr></thead>
+                <tbody>
+                  {s.by_product.map((p) => (
+                    <tr key={p.product_id}><td>{p.product_name}</td><td className="muted small">{p.pricing_type.replace('_', ' ')}</td><td className="num">{p.open_deals}</td><td className="num">{money(p.open_amount)}</td><td className="num">{p.won_deals}</td><td className="num">{money(p.won_amount)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
             <div className="card">
               <div className="card-h"><h2>Rotting deals</h2><span className="muted small right">open deals idle past their stage limit</span></div>
               <table className="table">

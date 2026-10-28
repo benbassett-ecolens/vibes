@@ -99,6 +99,8 @@ export interface Deal {
   expected_close_date: string | null
   closed_at: string | null
   lost_reason: string | null
+  lead_source: string | null
+  amount_from_products: boolean
   description: string | null
   position: number
   stage_entered_at: string
@@ -137,6 +139,84 @@ export interface Activity {
   created_by_name?: string | null
   created_at: string
   updated_at: string
+  source: ActivitySource
+  slack_channel?: string | null
+  slack_ts?: string | null
+  external_id: string | null
+  external_url: string | null
+  ends_at: string | null
+  meta: ActivityMeta
+}
+
+export type ActivitySource = 'manual' | 'gmail' | 'gcal'
+
+export interface EmailParty {
+  name: string | null
+  email: string
+}
+
+/** Extra data carried by synced activities. */
+export interface ActivityMeta {
+  direction?: 'sent' | 'received'
+  from?: EmailParty
+  to?: EmailParty[]
+  cc?: EmailParty[]
+  attendees?: Array<EmailParty & { status?: string; organizer?: boolean }>
+  thread_id?: string
+  location?: string | null
+  conference_url?: string | null
+  cancelled?: boolean
+  synced_by?: string
+}
+
+export interface GoogleConnection {
+  user_id: string
+  google_email: string
+  scopes: string[]
+  gmail_sync_window_days: number
+  gmail_sync_enabled: boolean
+  calendar_sync_enabled: boolean
+  gmail_synced_through: string | null
+  gmail_last_synced_at: string | null
+  calendar_last_synced_at: string | null
+  last_error: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SyncRun {
+  id: number
+  user_id: string
+  user_name?: string
+  kind: 'gmail' | 'calendar'
+  trigger: 'manual' | 'scheduled' | 'connect'
+  started_at: string
+  finished_at: string | null
+  status: 'running' | 'ok' | 'error'
+  items_seen: number
+  items_logged: number
+  items_updated: number
+  error: string | null
+}
+
+export interface UnmatchedItem {
+  id: number
+  user_id: string
+  source: 'gmail' | 'gcal'
+  external_id: string
+  occurred_at: string
+  subject: string | null
+  addresses: EmailParty[]
+  external_url: string | null
+  created_at: string
+  dismissed_at: string | null
+}
+
+export interface GoogleStatus {
+  configured: boolean
+  connection: GoogleConnection | null
+  runs: SyncRun[]
+  unmatched_count: number
 }
 
 export interface AuditEntry {
@@ -162,6 +242,47 @@ export interface StageHistoryEntry {
   changed_by_name?: string | null
   entered_at: string
   exited_at: string | null
+}
+
+export type PricingType = 'one_time' | 'monthly' | 'percent'
+
+export interface Product {
+  id: string
+  name: string
+  sku: string | null
+  pricing_type: PricingType
+  unit_price: number
+  description: string | null
+  is_active: boolean
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+export interface DealProduct {
+  id: string
+  deal_id: string
+  product_id: string
+  product_name?: string
+  pricing_type: PricingType
+  quantity: number
+  unit_price: number
+  term_months: number
+  basis_amount: number
+  notes: string | null
+  position: number
+  line_total?: number
+  created_at: string
+  updated_at: string
+}
+
+export interface SlackStatus {
+  configured: boolean
+  team_name?: string | null
+  bot_user?: string | null
+  me_linked: boolean
+  my_slack_user_id: string | null
+  error?: string | null
 }
 
 export interface LostReason {
@@ -226,5 +347,6 @@ export interface ReportSummary {
   lost_reasons: { reason: string; deal_count: number; total_amount: number }[]
   funnel: { stage_id: string; stage_name: string; position: number; reached: number }[]
   activity_by_type: { type: ActivityType; count: number }[]
+  by_product: { product_id: string; product_name: string; pricing_type: PricingType; open_deals: number; open_amount: number; won_deals: number; won_amount: number }[]
   stale_deals: Deal[]
 }

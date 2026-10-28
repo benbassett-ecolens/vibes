@@ -4,7 +4,10 @@ import { useAuth } from '../auth'
 import { fmtDateTime } from '../format'
 import { useRefData } from '../refdata'
 import { Avatar, ConfirmButton, Field, Modal, useToast } from '../components/ui'
-import type { Pipeline, Stage, User } from '../../shared/types'
+import type { Pipeline, Product, Stage, User } from '../../shared/types'
+import { GoogleCard, SlackCard } from '../components/Integrations'
+import { PRICING_LABEL } from '../../shared/pricing'
+import { useQuery } from '../hooks'
 
 const FORECAST = ['pipeline', 'best_case', 'commit', 'closed', 'omitted'] as const
 
@@ -133,6 +136,54 @@ function PipelineCard({ p, isAdmin }: { p: Pipeline; isAdmin: boolean }) {
   )
 }
 
+function ProductsCard({ isAdmin }: { isAdmin: boolean }) {
+  const toast = useToast()
+  const products = useQuery(() => api.get<{ items: Product[] }>('/api/products?all=true'), [])
+  const [form, setForm] = useState({ name: '', pricing_type: 'one_time' as Product['pricing_type'], unit_price: '' })
+  const run = async (fn: () => Promise<unknown>, msg = 'Saved') => {
+    try {
+      await fn()
+      toast(msg)
+      await products.refresh()
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    }
+  }
+  return (
+    <div className="card">
+      <div className="card-h"><h2>Products</h2><span className="muted small right">add to deals to price them; deal amount becomes the sum of lines</span></div>
+      <table className="table">
+        <thead><tr><th>Product</th><th>Pricing</th><th className="num">Default price</th><th>Status</th>{isAdmin && <th />}</tr></thead>
+        <tbody>
+          {(products.data?.items ?? []).map((p) => (
+            <tr key={p.id}>
+              <td><strong>{p.name}</strong>{p.description && <div className="muted small">{p.description}</div>}</td>
+              <td>{isAdmin ? (
+                <select className="select sm" value={p.pricing_type} onChange={(e) => run(() => api.patch(`/api/products/${p.id}`, { pricing_type: e.target.value }))}>
+                  {(Object.keys(PRICING_LABEL) as Product['pricing_type'][]).map((k) => <option key={k} value={k}>{PRICING_LABEL[k]}</option>)}
+                </select>
+              ) : PRICING_LABEL[p.pricing_type]}</td>
+              <td className="num">{isAdmin ? <input className="input sm" type="number" step="0.01" min={0} defaultValue={p.unit_price} style={{ width: 110 }} onBlur={(e) => Number(e.target.value) !== p.unit_price && run(() => api.patch(`/api/products/${p.id}`, { unit_price: Number(e.target.value) }))} /> : p.unit_price}{p.pricing_type === 'percent' && <span className="muted small"> %</span>}</td>
+              <td>{p.is_active ? <span className="badge good">active</span> : <span className="badge">inactive</span>}</td>
+              {isAdmin && <td className="row"><button className="btn ghost sm" onClick={() => run(() => api.patch(`/api/products/${p.id}`, { is_active: !p.is_active }))}>{p.is_active ? 'Deactivate' : 'Activate'}</button><ConfirmButton className="btn ghost sm" label="✕" confirmLabel="Delete?" onConfirm={() => run(() => api.delete(`/api/products/${p.id}`), 'Deleted')} /></td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {isAdmin && (
+        <form className="row wrap" style={{ padding: 12, borderTop: '1px solid var(--border)' }} onSubmit={(e) => { e.preventDefault(); if (form.name.trim()) run(() => api.post('/api/products', { name: form.name.trim(), pricing_type: form.pricing_type, unit_price: Number(form.unit_price) || 0 }), 'Product added').then(() => setForm({ name: '', pricing_type: 'one_time', unit_price: '' })) }}>
+          <input className="input sm" placeholder="New product name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={{ width: 220 }} />
+          <select className="select sm" value={form.pricing_type} onChange={(e) => setForm({ ...form, pricing_type: e.target.value as Product['pricing_type'] })} style={{ width: 'auto' }}>
+            {(Object.keys(PRICING_LABEL) as Product['pricing_type'][]).map((k) => <option key={k} value={k}>{PRICING_LABEL[k]}</option>)}
+          </select>
+          <input className="input sm" type="number" step="0.01" min={0} placeholder="Default price" value={form.unit_price} onChange={(e) => setForm({ ...form, unit_price: e.target.value })} style={{ width: 120 }} />
+          <button className="btn sm primary">Add product</button>
+        </form>
+      )}
+    </div>
+  )
+}
+
 export function SettingsPage() {
   const { user } = useAuth()
   const { pipelines, users, lostReasons, refresh } = useRefData()
@@ -166,6 +217,13 @@ export function SettingsPage() {
           <p className="muted small" style={{ marginBottom: 10 }}>Probability feeds the weighted pipeline. Forecast category groups open deals in reports (Salesforce-style). “Rots after” flags deals that sit idle in a stage with no logged activity (Pipedrive-style).</p>
           <div className="grid">{pipelines.map((p) => <PipelineCard key={p.id} p={p} isAdmin={isAdmin} />)}</div>
         </div>
+
+        <div className="grid c2">
+          <GoogleCard />
+          <SlackCard />
+        </div>
+
+        <ProductsCard isAdmin={isAdmin} />
 
         <div className="grid c2">
           <div className="card">

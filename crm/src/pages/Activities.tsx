@@ -15,14 +15,15 @@ export function ActivitiesPage() {
   const [status, setStatus] = useState<'open' | 'overdue' | 'today' | 'completed' | ''>('open')
   const [owner, setOwner] = useState<string | null>(user?.id ?? null)
   const [type, setType] = useState('')
+  const [source, setSource] = useState('')
   const [q, setQ] = useState('')
   const dq = useDebounced(q)
   const [offset, setOffset] = useState(0)
   const { sort, dir, toggle } = useSort('due_at', 'asc')
-  useEffect(() => setOffset(0), [status, owner, type, dq, sort, dir])
+  useEffect(() => setOffset(0), [status, owner, type, source, dq, sort, dir])
   const { data, loading, refresh } = useQuery(
-    () => api.get<Paged<Activity>>(`/api/activities${qs({ status, owner_id: owner, type, q: dq, sort: status === 'completed' || status === '' ? (sort === 'due_at' ? 'created_at' : sort) : sort, dir: status === '' && sort === 'due_at' ? 'desc' : dir, limit: 50, offset })}`),
-    [status, owner, type, dq, sort, dir, offset],
+    () => api.get<Paged<Activity>>(`/api/activities${qs({ status, owner_id: owner, type, source, q: dq, sort: status === 'completed' || status === '' ? (sort === 'due_at' ? 'created_at' : sort) : sort, dir: status === '' && sort === 'due_at' ? 'desc' : dir, limit: 50, offset })}`),
+    [status, owner, type, source, dq, sort, dir, offset],
   )
   const toggleDone = async (a: Activity) => {
     try {
@@ -34,8 +35,8 @@ export function ActivitiesPage() {
   }
   const columns: Column<Activity>[] = [
     { key: 'done', label: '', width: '32px', render: (a) => ((a.type === 'task' || a.type === 'meeting' || a.due_at) ? <input type="checkbox" checked={!!a.completed_at} onChange={() => toggleDone(a)} /> : null) },
-    { key: 'type', label: 'Type', sortable: true, render: (a) => <span>{ACTIVITY_ICON[a.type]} {a.type}</span> },
-    { key: 'subject', label: 'Subject', sortable: true, render: (a) => <span><strong>{a.subject}</strong>{a.body && <span className="muted small"> — {a.body.slice(0, 80)}</span>}</span> },
+    { key: 'type', label: 'Type', sortable: true, render: (a) => <span>{ACTIVITY_ICON[a.type]} {a.type}{a.source !== 'manual' && <span className="flag" style={{ marginLeft: 6 }}>{a.source === 'gmail' ? 'Gmail' : 'Calendar'}</span>}{a.slack_ts && <span className="flag" style={{ marginLeft: 6 }}>Slack</span>}</span> },
+    { key: 'subject', label: 'Subject', sortable: true, render: (a) => <span><strong>{a.subject}</strong>{a.body && <span className="muted small"> — {a.body.slice(0, 80)}</span>}{a.external_url && <> <a href={a.external_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>↗</a></>}</span> },
     { key: 'deal', label: 'Deal', sortable: true, render: (a) => (a.deal_id ? <Link to={`/deals/${a.deal_id}`}>{a.deal_title}</Link> : a.contact_id ? <Link to={`/contacts/${a.contact_id}`}>{a.contact_name}</Link> : a.company_id ? <Link to={`/companies/${a.company_id}`}>{a.company_name}</Link> : '—') },
     { key: 'owner', label: 'Assigned to', sortable: true, render: (a) => a.owner_name ?? '—' },
     { key: 'due_at', label: 'Due', sortable: true, render: (a) => (a.due_at ? <span className={!a.completed_at && new Date(a.due_at).getTime() < Date.now() ? 'error' : ''} title={fmtDateTime(a.due_at)}>{relative(a.due_at)}</span> : <span className="muted">—</span>) },
@@ -56,6 +57,12 @@ export function ActivitiesPage() {
           <select className="select" value={type} onChange={(e) => setType(e.target.value)}>
             <option value="">All types</option>
             {(['task', 'meeting', 'call', 'email', 'note'] as const).map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select className="select" value={source} onChange={(e) => setSource(e.target.value)}>
+            <option value="">Any source</option>
+            <option value="manual">Logged by hand</option>
+            <option value="gmail">Gmail</option>
+            <option value="gcal">Calendar</option>
           </select>
           <input className="input search" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
           <a className="btn sm right" href="/api/export/activities.csv" download>⤓ Export CSV</a>

@@ -5,6 +5,9 @@ import { audit, diff } from '../audit.js'
 import { one, query, withTransaction } from '../db.js'
 import { badRequest, notFound, parse, parsePaging, parseSort, wrap } from '../http.js'
 import type { Activity, AuditEntry, Deal, Stage, StageHistoryEntry, TimelineItem } from '../../shared/types.js'
+import { dealProductsRouter } from './products.js'
+import { postTaskCard, slackSafe } from '../slack/client.js'
+
 
 export const dealsRouter = Router()
 
@@ -19,7 +22,22 @@ const dealSchema = z.object({
   owner_id: z.string().uuid().nullable().optional(),
   expected_close_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   lost_reason: z.string().trim().max(200).nullable().optional(),
+  lead_source: z.string().trim().max(120).nullable().optional(),
   description: z.string().max(20000).nullable().optional(),
+})
+
+/**
+ * Required on creation (Ecolens policy): company, a main contact with an email,
+ * and a scheduled next activity (date + description). The next activity becomes a task.
+ */
+const createDealSchema = dealSchema.extend({
+  company_id: z.string().uuid({ message: 'Company is required' }),
+  contact_id: z.string().uuid({ message: 'Main contact is required' }),
+  next_activity: z.object({
+    subject: z.string().trim().min(1, 'Next activity description is required').max(300),
+    due_at: z.string().datetime({ offset: true, message: 'Next activity date is required' }),
+    type: z.enum(['task', 'call', 'email', 'meeting']).optional(),
+  }),
 })
 
 const SORTS: Record<string, string> = {
@@ -203,7 +221,12 @@ async function moveStage(
 dealsRouter.post(
   '/',
   wrap(async (req, res) => {
-    const body = parse(dealSchema, req.body)
+    const body = parse(createDealSchema, req.body)
+    const contact = await one<{ id: string; email: string | null; company_id: string | null }>('SELECT id, email, company_id FROM contacts WHERE id = $1 AND archived_at IS NULL', [body.contact_id])
+    if (!contact) throw badRequest('Main contact not found')
+    if (!contact.email) throw badRequest('Main contact must have an email address', [{ path: 'contact_id', message: 'Main contact must have an email address' }])
+    if (!(await one('SELECT 1 FROM companies WHERE id = $1 AND archived_at IS NULL', [body.company_id]))) throw badRequest('Company not found')
+    let nextTaskId: string | null = null
     const created = await withTransaction(async (client) => {
       let pipelineId = body.pipeline_id
       if (!pipelineId) {
@@ -222,16 +245,26 @@ dealsRouter.post(
       }
       const closedAt = stage.kind === 'open' ? null : new Date().toISOString()
       const d = (await one<Deal>(
-        `INSERT INTO deals (title, pipeline_id, stage_id, amount, currency, company_id, contact_id, owner_id, expected_close_date, lost_reason, description, closed_at, created_by, position)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, (SELECT COALESCE(MAX(position), 0) + 1 FROM deals WHERE stage_id = $3))
+        `INSERT INTO deals (title, pipeline_id, stage_id, amount, currency, company_id, contact_id, owner_id, expected_close_date, lost_reason, lead_source, description, closed_at, created_by, position)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, (SELECT COALESCE(MAX(position), 0) + 1 FROM deals WHERE stage_id = $3))
          RETURNING *`,
-        [body.title, pipelineId, stage.id, body.amount ?? 0, body.currency ?? 'USD', body.company_id ?? null, body.contact_id ?? null, body.owner_id ?? req.user.id, body.expected_close_date ?? null, body.lost_reason ?? null, body.description ?? null, closedAt, req.user.id],
+        [body.title, pipelineId, stage.id, body.amount ?? 0, body.currency ?? 'USD', body.company_id, body.contact_id, body.owner_id ?? req.user.id, body.expected_close_date ?? null, body.lost_reason ?? null, body.lead_source ?? null, body.description ?? null, closedAt, req.user.id],
         client,
       ))!
       await query('INSERT INTO deal_stage_history (deal_id, from_stage_id, to_stage_id, changed_by) VALUES ($1, NULL, $2, $3)', [d.id, stage.id, req.user.id], client)
-      await audit(client, { entityType: 'deal', entityId: d.id, action: 'create', actorId: req.user.id, changes: { ...body, stage: stage.name }, summary: `Created deal ${d.title} in ${stage.name}` })
+      const { next_activity, ...rest } = body
+      await audit(client, { entityType: 'deal', entityId: d.id, action: 'create', actorId: req.user.id, changes: { ...rest, stage: stage.name, next_activity: next_activity.subject }, summary: `Created deal ${d.title} in ${stage.name}` })
+      const task = (await one<{ id: string }>(
+        `INSERT INTO activities (type, subject, deal_id, contact_id, company_id, owner_id, due_at, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+        [next_activity.type ?? 'task', next_activity.subject, d.id, d.contact_id, d.company_id, d.owner_id ?? req.user.id, next_activity.due_at, req.user.id],
+        client,
+      ))!
+      nextTaskId = task.id
+      await audit(client, { entityType: 'activity', entityId: task.id, action: 'create', actorId: req.user.id, changes: { type: next_activity.type ?? 'task', subject: next_activity.subject, deal_id: d.id }, summary: `Scheduled next activity: ${next_activity.subject}` })
       return d
     })
+    if (nextTaskId) slackSafe(postTaskCard(nextTaskId))
     res.status(201).json(await loadDeal(created.id))
   }),
 )
@@ -242,6 +275,12 @@ dealsRouter.patch(
     const body = parse(dealSchema.partial(), req.body)
     const before = await loadDeal(req.params.id as string)
     if (!before) throw notFound('Deal')
+    if (body.company_id === null) throw badRequest('Company is required')
+    if (body.contact_id === null) throw badRequest('Main contact is required')
+    if (body.contact_id && body.contact_id !== before.contact_id) {
+      const c = await one<{ email: string | null }>('SELECT email FROM contacts WHERE id = $1', [body.contact_id])
+      if (!c?.email) throw badRequest('Main contact must have an email address')
+    }
     await withTransaction(async (client) => {
       const next = { ...before, ...body }
       if (body.pipeline_id && body.pipeline_id !== before.pipeline_id) {
@@ -257,13 +296,13 @@ dealsRouter.patch(
       }
       // Plain field update first; a stage change (below) then owns closed_at / lost_reason.
       const after = (await one<Deal>(
-        `UPDATE deals SET title = $2, amount = $3, currency = $4, company_id = $5, contact_id = $6, owner_id = $7,
-           expected_close_date = $8, lost_reason = $9, description = $10
+        `UPDATE deals SET title = $2, amount = CASE WHEN amount_from_products THEN amount ELSE $3 END, currency = $4, company_id = $5, contact_id = $6, owner_id = $7,
+           expected_close_date = $8, lost_reason = $9, description = $10, lead_source = $11
          WHERE id = $1 RETURNING *`,
-        [before.id, next.title, next.amount, next.currency, next.company_id, next.contact_id, next.owner_id, next.expected_close_date, next.lost_reason, next.description],
+        [before.id, next.title, next.amount, next.currency, next.company_id, next.contact_id, next.owner_id, next.expected_close_date, next.lost_reason, next.description, next.lead_source],
         client,
       ))!
-      const pick = (d: Deal) => ({ title: d.title, amount: d.amount, currency: d.currency, company_id: d.company_id, contact_id: d.contact_id, owner_id: d.owner_id, expected_close_date: d.expected_close_date, description: d.description, lost_reason: d.lost_reason })
+      const pick = (d: Deal) => ({ title: d.title, amount: d.amount, currency: d.currency, company_id: d.company_id, contact_id: d.contact_id, owner_id: d.owner_id, expected_close_date: d.expected_close_date, description: d.description, lost_reason: d.lost_reason, lead_source: d.lead_source })
       const fieldChanges = diff(pick(before), pick(after))
       const stageChanging = !(body.pipeline_id && body.pipeline_id !== before.pipeline_id) && !!body.stage_id && body.stage_id !== before.stage_id
       if (stageChanging) delete fieldChanges.lost_reason // recorded with the stage change below
@@ -278,6 +317,8 @@ dealsRouter.patch(
     res.json(await loadDeal(before.id))
   }),
 )
+
+dealsRouter.use('/:dealId/products', dealProductsRouter)
 
 /** Kanban drag/drop: move to a stage at a position. */
 dealsRouter.post(

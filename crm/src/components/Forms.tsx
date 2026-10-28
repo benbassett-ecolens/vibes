@@ -3,6 +3,7 @@ import { api } from '../api'
 import { useAuth } from '../auth'
 import { useRefData } from '../refdata'
 import { Field, Modal, useToast } from './ui'
+import { toLocalInputDateTime, fromLocalInputDateTime } from '../format'
 import { CompanyPicker, ContactPicker, OwnerSelect } from './Pickers'
 import type { Company, Contact, Deal } from '../../shared/types'
 
@@ -24,7 +25,12 @@ export function DealForm({ initial, onClose, onSaved, defaults }: { initial?: De
     contact_name: base?.contact_name ?? null,
     owner_id: base?.owner_id ?? user?.id ?? null,
     expected_close_date: base?.expected_close_date ?? '',
+    lead_source: base?.lead_source ?? '',
     description: base?.description ?? '',
+    contact_email: null as string | null,
+    next_subject: '',
+    next_due: toLocalInputDateTime(new Date(Date.now() + 2 * 86400e3).toISOString()).slice(0, 11) + '09:00',
+    next_type: 'task' as 'task' | 'call' | 'email' | 'meeting',
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -35,6 +41,13 @@ export function DealForm({ initial, onClose, onSaved, defaults }: { initial?: De
     setBusy(true)
     setError(null)
     try {
+      if (!initial) {
+        if (!form.company_id) throw new Error('Company is required')
+        if (!form.contact_id) throw new Error('Main contact is required')
+        if (form.contact_email === '' ) throw new Error('The main contact needs an email address. Edit the contact first.')
+        if (!form.next_subject.trim()) throw new Error('Next activity description is required')
+        if (!form.next_due) throw new Error('Next activity date is required')
+      }
       const body = {
         title: form.title,
         pipeline_id: pipelineId,
@@ -45,7 +58,9 @@ export function DealForm({ initial, onClose, onSaved, defaults }: { initial?: De
         contact_id: form.contact_id,
         owner_id: form.owner_id,
         expected_close_date: form.expected_close_date || null,
+        lead_source: form.lead_source || null,
         description: form.description || null,
+        ...(initial ? {} : { next_activity: { subject: form.next_subject.trim(), due_at: fromLocalInputDateTime(form.next_due), type: form.next_type } }),
       }
       const d = initial ? await api.patch<Deal>(`/api/deals/${initial.id}`, body) : await api.post<Deal>('/api/deals', body)
       toast(initial ? 'Deal updated' : 'Deal created')
@@ -72,12 +87,30 @@ export function DealForm({ initial, onClose, onSaved, defaults }: { initial?: De
               {pipeline?.stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
-          <Field label="Amount"><input className="input" type="number" min="0" step="0.01" value={form.amount} onChange={(e) => set({ amount: e.target.value })} /></Field>
+          <Field label={initial?.amount_from_products ? 'Amount (from products)' : 'Amount'}><input className="input" type="number" min="0" step="0.01" value={form.amount} disabled={!!initial?.amount_from_products} onChange={(e) => set({ amount: e.target.value })} /></Field>
           <Field label="Currency"><input className="input" maxLength={3} value={form.currency} onChange={(e) => set({ currency: e.target.value.toUpperCase() })} /></Field>
-          <Field label="Company"><CompanyPicker value={form.company_id} label={form.company_name} onChange={(id, c) => set({ company_id: id, company_name: c?.name ?? null })} /></Field>
-          <Field label="Primary contact"><ContactPicker value={form.contact_id} label={form.contact_name} companyId={form.company_id} onChange={(id, c) => set({ contact_id: id, contact_name: c ? `${c.first_name} ${c.last_name}`.trim() : null })} /></Field>
+          <Field label="Company *"><CompanyPicker value={form.company_id} label={form.company_name} onChange={(id, c) => set({ company_id: id, company_name: c?.name ?? null })} /></Field>
+          <Field label="Main contact *">
+            <ContactPicker value={form.contact_id} label={form.contact_name} companyId={form.company_id} onChange={(id, c) => set({ contact_id: id, contact_name: c ? `${c.first_name} ${c.last_name}`.trim() : null, contact_email: c ? (c.email ?? '') : null })} />
+            {form.contact_email === '' && <span className="error small">This contact has no email address. Main contacts need one.</span>}
+            {form.contact_email && <span className="muted small">{form.contact_email}</span>}
+          </Field>
           <Field label="Owner"><OwnerSelect value={form.owner_id} onChange={(id) => set({ owner_id: id })} /></Field>
           <Field label="Expected close"><input className="input" type="date" value={form.expected_close_date} onChange={(e) => set({ expected_close_date: e.target.value })} /></Field>
+          <Field label="Lead source"><input className="input" list="lead-sources" placeholder="Referral, inbound, event…" value={form.lead_source} onChange={(e) => set({ lead_source: e.target.value })} /><datalist id="lead-sources"><option value="Referral" /><option value="Inbound" /><option value="Outbound" /><option value="Event" /><option value="Partner" /><option value="Existing customer" /></datalist></Field>
+          {!initial && (
+            <>
+              <Field label="Next activity *" span2>
+                <div className="row">
+                  <select className="select" value={form.next_type} onChange={(e) => set({ next_type: e.target.value as typeof form.next_type })} style={{ width: 'auto' }}>
+                    <option value="task">Task</option><option value="call">Call</option><option value="email">Email</option><option value="meeting">Meeting</option>
+                  </select>
+                  <input className="input grow" required placeholder="What happens next? e.g. Send proposal" value={form.next_subject} onChange={(e) => set({ next_subject: e.target.value })} />
+                  <input className="input" type="datetime-local" required value={form.next_due} onChange={(e) => set({ next_due: e.target.value })} style={{ width: 'auto' }} />
+                </div>
+              </Field>
+            </>
+          )}
           <Field label="Description" span2><textarea className="textarea" value={form.description} onChange={(e) => set({ description: e.target.value })} /></Field>
         </div>
         {error && <p className="error" style={{ marginTop: 10 }}>{error}</p>}

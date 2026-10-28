@@ -146,6 +146,22 @@ reportsRouter.get(
       params,
     )
 
+    const byProduct = await query<ReportSummary['by_product'][number]>(
+      `SELECT p.id AS product_id, p.name AS product_name, p.pricing_type,
+         COUNT(DISTINCT d.id) FILTER (WHERE s.kind = 'open')::int AS open_deals,
+         COALESCE(SUM(CASE WHEN s.kind = 'open' THEN
+           CASE dp.pricing_type WHEN 'percent' THEN dp.basis_amount * dp.unit_price / 100 WHEN 'monthly' THEN dp.quantity * dp.unit_price * dp.term_months ELSE dp.quantity * dp.unit_price END END), 0) AS open_amount,
+         COUNT(DISTINCT d.id) FILTER (WHERE s.kind = 'won' AND ${inRange})::int AS won_deals,
+         COALESCE(SUM(CASE WHEN s.kind = 'won' AND ${inRange} THEN
+           CASE dp.pricing_type WHEN 'percent' THEN dp.basis_amount * dp.unit_price / 100 WHEN 'monthly' THEN dp.quantity * dp.unit_price * dp.term_months ELSE dp.quantity * dp.unit_price END END), 0) AS won_amount
+       FROM products p
+       LEFT JOIN deal_products dp ON dp.product_id = p.id
+       LEFT JOIN deals d ON d.id = dp.deal_id AND ${scope}
+       LEFT JOIN stages s ON s.id = d.stage_id
+       GROUP BY p.id ORDER BY p.position, p.name`,
+      params,
+    )
+
     const stale = await query<Deal>(
       `${DEAL_SELECT} WHERE ${scope} AND s.kind = 'open' AND s.rot_after_days IS NOT NULL
          AND COALESCE(d.last_activity_at, d.stage_entered_at) < now() - (s.rot_after_days || ' days')::interval
@@ -176,6 +192,7 @@ reportsRouter.get(
       lost_reasons: lostReasons,
       funnel,
       activity_by_type: activityByType,
+      by_product: byProduct,
       stale_deals: stale,
     }
     res.json({ filters: f, ...out })

@@ -20,6 +20,10 @@ enterprise sprawl is not.
 | **Reports** | Pipeline by stage (value, weighted, average days in stage), won vs lost by month, win rate, average deal size, average sales cycle, sales velocity, forecast categories, funnel conversion, lost reasons, per-owner leaderboard with activity counts, activity mix, rotting deals. Filter by pipeline, owner and date range. |
 | **Sorting** | Every list endpoint accepts `sort` + `dir` against a per-endpoint whitelist; every table header toggles it. |
 | **Export** | CSV for deals, contacts, companies, activities, stage history and the full audit log. |
+| **Gmail & Calendar sync** | Each person connects their own Google account (Settings). Emails and calendar invites that involve a CRM contact are logged automatically as email/meeting activities on the right deal, with a link back to Gmail/Calendar. Senders we cannot match are listed so you can create the contact in one click. Customer emails reset a deal's rot timer. |
+| **Slack to-dos** | Every task assigned to you is mirrored to a Slack DM with a **Mark done** button. Done in Slack = done in the CRM; done in the CRM updates the Slack card. `/todo <what> \| <when>` in Slack creates a CRM task. A nudge lands in the card's thread when the task comes due. |
+| **Products** | A product catalogue (one-time, monthly, or percent-of-basis pricing). Add lines to a deal and the deal amount becomes the sum of the lines; reports show revenue by product. |
+| **Required fields** | A deal cannot be created without a company, a main contact that has an email address, and a scheduled next activity (date + description). Deal pages warn when no next activity is scheduled. |
 | **Users & roles** | Anyone with an `@ecolens.io` Workspace account is created on first sign-in as a member. Admins (seeded from `ADMIN_EMAILS`, or promoted in Settings) manage pipelines, stages, lost reasons and users, and can deactivate accounts. |
 
 ## The login gate
@@ -38,6 +42,85 @@ Optional belt-and-braces: put [Identity-Aware Proxy](https://cloud.google.com/ia
 in front of the Cloud Run service with an `ecolens.io` domain principal. The app's own gate still
 applies behind it.
 
+## Gmail & Calendar sync
+
+Per-user OAuth, read-only scopes (`gmail.readonly`, `calendar.readonly`). We store the refresh
+token encrypted (AES-256-GCM, key from `TOKEN_ENCRYPTION_KEY` or `SESSION_SECRET`) and keep only
+message headers + Gmail's ~200-character snippet, never bodies or attachments. Purely internal
+threads (all `@ecolens.io`) are ignored.
+
+- **Gmail**: every run lists messages since the last watermark (minus a day of overlap) excluding
+  spam, trash, promotions, social and updates; one activity per RFC `Message-ID`, so two reps on
+  the same thread produce one record. Direction (sent/received) comes from the From header.
+- **Calendar**: initial window is 30 days back / 90 days ahead, then incremental via the API's
+  `syncToken`; cancelled events remove the meeting, time changes update it, past meetings are
+  marked completed. Dedup key is `iCalUID`.
+- **Matching**: external addresses → `contacts.email`; the activity attaches to the newest open
+  deal naming that contact (else one at their company). Unmatched senders are kept in a list in
+  Settings with a "Create contact" button that back-fills the item.
+- **Scheduling**: Cloud Scheduler calls `POST /api/internal/sync` every 10 minutes with
+  `Authorization: Bearer $SYNC_SECRET` (set up by `deploy/setup-gcp.sh`). The same endpoint runs
+  retention maintenance. Locally, set `SYNC_INTERVAL_MINUTES=10` for an in-process timer.
+
+Setup: on the OAuth client add `https://crm.ecolens.io/api/google/callback` as an **Authorized
+redirect URI**, enable the **Gmail API** and **Google Calendar API** in the project, and set
+`GOOGLE_CLIENT_SECRET` and `APP_BASE_URL`. Because the consent screen is *Internal*, Google's
+restricted-scope verification is not required.
+
+## Slack to-dos
+
+Create a Slack app from this manifest (api.slack.com/apps → Create New App → From manifest),
+install it to the workspace, and set `SLACK_BOT_TOKEN` (xoxb-…) and `SLACK_SIGNING_SECRET`:
+
+```yaml
+display_information:
+  name: Ecolens CRM
+features:
+  bot_user: { display_name: Ecolens CRM, always_online: true }
+  slash_commands:
+    - command: /todo
+      url: https://crm.ecolens.io/api/slack/webhooks/commands
+      description: Add a to-do to the CRM
+      usage_hint: "Send proposal to Acme | tomorrow 9am"
+oauth_config:
+  scopes:
+    bot: [chat:write, im:write, users:read, users:read.email, commands]
+settings:
+  interactivity:
+    is_enabled: true
+    request_url: https://crm.ecolens.io/api/slack/webhooks/interactions
+```
+
+How it stays in sync: the CRM posts a Block Kit card (with the task's deal, contact, due date and a
+**Mark done** button) to the assignee's DM when a task is created or assigned, and stores the
+message id on the activity. Completing or reopening in the CRM calls `chat.update` on that card.
+Pressing the button sends a signed interaction to `/api/slack/webhooks/interactions`; the server
+verifies the Slack signature, maps the Slack user to the CRM user by email, completes the task,
+writes the audit entry (`via: slack`) and updates the card. Slack's own "Later / To-do" list has no
+public API, so the card-in-DM is the integration point. Users link their Slack account by email
+automatically; Settings has a "Send test DM" and "Send my open tasks to Slack" button.
+
+## Products & pricing
+
+Settings → Products. Three pricing types:
+
+| Type | Line total |
+| --- | --- |
+| One-time | quantity × unit price |
+| Monthly | quantity × unit price × term months (default 12) |
+| % of basis | basis amount × unit price % |
+
+The seeded catalogue (Core ERP Monthly Retainer, Core ERP SQL, Core ERP Closed Won %, EcoNet
+subscription fee, AI build fee, AI monthly) has zero default prices; set them in Settings. Once a
+deal has any line, its amount is derived from the lines (the Amount field becomes read-only).
+
+## Retention
+
+`AUDIT_RETENTION_MONTHS` (default 6) purges `audit_log` rows older than that on each scheduled
+run; `0` keeps everything. Stage history, activities and synced emails are never purged (reports
+depend on them). `UNMATCHED_RETENTION_DAYS` (default 90) trims the unmatched-sender list. Export
+the audit log CSV before lowering retention if you want an archive.
+
 ## Architecture
 
 ```
@@ -48,9 +131,12 @@ crm/
     audit.ts       audit_log writer + field diff
     routes/        auth, users, pipelines(+stages, lost reasons), companies, contacts, deals,
                    activities, audit feed, reports, csv exports
+    google/        OAuth connect flow, Gmail/Calendar sync engine, token encryption
+    slack/         Slack task cards, interactions + slash-command webhooks
+    maintenance.ts retention purges + Slack due-now nudges
     migrate.ts     forward-only SQL migrator (runs on boot)
     seed.ts        demo data for local development
-  migrations/      001_init.sql — schema, triggers, default pipeline
+  migrations/      001 schema · 002 Google sync · 003 products, Slack, required fields
   shared/types.ts  API types shared by server and client
   src/             React 18 + Vite + react-router + recharts
     pages/         Dashboard, Deals (board + list), DealDetail, Contacts, ContactDetail,
@@ -130,6 +216,12 @@ revisions.
 | `SESSION_HOURS` | Session lifetime (default 72) |
 | `DATABASE_URL` **or** `CLOUD_SQL_CONNECTION_NAME` + `DB_USER` + `DB_PASSWORD` + `DB_NAME` | Postgres connection |
 | `AUTH_DEV_MODE` | Dev-only password-less login; ignored in production |
+| `GOOGLE_CLIENT_SECRET`, `APP_BASE_URL` | Enable Gmail/Calendar sync (OAuth code exchange + redirect URI) |
+| `TOKEN_ENCRYPTION_KEY` | Encrypts stored Google refresh tokens (defaults to `SESSION_SECRET`) |
+| `SYNC_SECRET` | Bearer token Cloud Scheduler uses for `POST /api/internal/sync` |
+| `SYNC_INTERVAL_MINUTES` | Optional in-process sync timer (needs `min-instances=1`) |
+| `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET` | Enable Slack to-do sync |
+| `AUDIT_RETENTION_MONTHS`, `UNMATCHED_RETENTION_DAYS` | Retention (6 months / 90 days by default) |
 
 ## API sketch
 
@@ -148,6 +240,12 @@ GET/POST /api/deals       GET /api/deals/board?pipeline_id=…   GET/PATCH/DELET
 POST /api/deals/:id/move {stage_id, position, lost_reason}     GET /api/deals/:id/timeline
 GET/POST /api/activities  PATCH/DELETE /api/activities/:id ({completed: true} marks done)
 GET  /api/audit?entity_type&entity_id&actor_id
+GET/POST/PATCH/DELETE /api/deals/:id/products[/:lineId]
+GET /api/products   POST/PATCH/DELETE /api/products/:id             (admin)
+GET /api/google/connect → Google → /api/google/callback   GET /api/google/status   POST /api/google/sync
+PATCH/DELETE /api/google/connection   GET /api/google/unmatched   POST /api/google/unmatched/:id/{dismiss|create-contact}
+GET /api/slack/status  POST /api/slack/{link|test|resend}   POST /api/slack/webhooks/{interactions|commands}  (Slack-signed)
+POST /api/internal/sync                                          (Bearer SYNC_SECRET; sync all + maintenance)
 GET  /api/reports/summary?pipeline_id&owner_id&from&to
 GET  /api/export/{deals|contacts|companies|activities|stage_history|audit_log}.csv
 ```

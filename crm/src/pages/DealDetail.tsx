@@ -7,6 +7,7 @@ import { useRefData } from '../refdata'
 import { ActivityComposer } from '../components/ActivityComposer'
 import { DealForm } from '../components/Forms'
 import { Timeline } from '../components/Timeline'
+import { DealProducts } from '../components/DealProducts'
 import { Avatar, ConfirmButton, Modal, useToast } from '../components/ui'
 import type { Deal, StageHistoryEntry, TimelineItem } from '../../shared/types'
 
@@ -116,7 +117,11 @@ export function DealDetail() {
 
         <div className="detail-layout">
           <div className="grid" style={{ gap: 16 }}>
+            {d.stage_kind === 'open' && !d.next_activity_at && (
+              <div className="error-box row"><span className="grow">No next activity is scheduled on this deal. Add a task or meeting below so it does not go stale.</span></div>
+            )}
             <ActivityComposer dealId={d.id} contactId={d.contact_id ?? undefined} companyId={d.company_id ?? undefined} onCreated={refreshAll} />
+            <DealProducts dealId={d.id} currency={d.currency} onChanged={refreshAll} />
             <div className="card">
               <div className="card-h"><h2>Timeline</h2><span className="muted small right">Every change, stamped</span></div>
               <div className="card-b" style={{ paddingTop: 4 }}>
@@ -129,12 +134,13 @@ export function DealDetail() {
               <div className="card-h"><h2>Details</h2></div>
               <div className="card-b">
                 <dl className="kv">
-                  <dt>Amount</dt><dd><strong>{money(d.amount, d.currency)}</strong> <span className="muted small">· {money(d.weighted_amount, d.currency)} weighted at {d.probability}%</span></dd>
+                  <dt>Amount</dt><dd><strong>{money(d.amount, d.currency)}</strong> <span className="muted small">· {money(d.weighted_amount, d.currency)} weighted at {d.probability}%{d.amount_from_products ? ' · from products' : ''}</span></dd>
                   <dt>Company</dt><dd>{d.company_id ? <Link to={`/companies/${d.company_id}`}>{d.company_name}</Link> : '—'}</dd>
                   <dt>Contact</dt><dd>{d.contact_id ? <Link to={`/contacts/${d.contact_id}`}>{d.contact_name}</Link> : '—'}</dd>
                   <dt>Owner</dt><dd className="row"><Avatar name={d.owner_name} /> {d.owner_name ?? 'Unassigned'}</dd>
                   <dt>Expected close</dt><dd>{fmtDate(d.expected_close_date)}{d.expected_close_date && d.stage_kind === 'open' && <span className="muted small"> ({relative(d.expected_close_date)})</span>}</dd>
                   {d.lost_reason && <><dt>Lost reason</dt><dd>{d.lost_reason}</dd></>}
+                  {d.lead_source && <><dt>Lead source</dt><dd>{d.lead_source}</dd></>}
                   <dt>Next activity</dt><dd>{d.next_activity_at ? <span className={(d.overdue_task_count ?? 0) > 0 ? 'error' : ''}>{fmtDateTime(d.next_activity_at)}</span> : <span className="muted">none scheduled</span>}</dd>
                   <dt>Last activity</dt><dd>{d.last_activity_at ? fmtDateTime(d.last_activity_at) : <span className="muted">never</span>}</dd>
                   <dt>Created</dt><dd>{fmtDateTime(d.created_at)}</dd>

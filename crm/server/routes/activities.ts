@@ -4,6 +4,7 @@ import { audit, diff } from '../audit.js'
 import { one, query, withTransaction } from '../db.js'
 import { badRequest, notFound, parse, parsePaging, parseSort, wrap } from '../http.js'
 import type { Activity } from '../../shared/types.js'
+import { deleteTaskCard, postTaskCard, slackSafe, updateTaskCard } from '../slack/client.js'
 
 export const activitiesRouter = Router()
 
@@ -66,6 +67,7 @@ activitiesRouter.get(
     if (typeof q.company_id === 'string' && q.company_id) add('a.company_id = ?', q.company_id)
     if (typeof q.owner_id === 'string' && q.owner_id) add('a.owner_id = ?', q.owner_id)
     if (typeof q.type === 'string' && q.type) add('a.type = ?', q.type)
+    if (typeof q.source === 'string' && q.source) add('a.source = ?', q.source)
     if (q.status === 'open') where.push('a.completed_at IS NULL AND a.due_at IS NOT NULL')
     if (q.status === 'overdue') where.push('a.completed_at IS NULL AND a.due_at < now()')
     if (q.status === 'completed') where.push('a.completed_at IS NOT NULL')
@@ -85,7 +87,7 @@ activitiesRouter.post(
   '/',
   wrap(async (req, res) => {
     const body = parse(activitySchema, req.body)
-    if (!body.deal_id && !body.contact_id && !body.company_id) throw badRequest('Attach the activity to a deal, contact or company')
+    if (body.type !== 'task' && !body.deal_id && !body.contact_id && !body.company_id) throw badRequest('Attach the activity to a deal, contact or company')
     const created = await withTransaction(async (client) => {
       // Inherit company/contact from the deal when not given, so timelines line up.
       let { company_id, contact_id } = body
@@ -106,6 +108,7 @@ activitiesRouter.post(
       await audit(client, { entityType: 'activity', entityId: a.id, action: 'create', actorId: req.user.id, changes: { type: a.type, subject: a.subject, deal_id: a.deal_id }, summary: `Logged ${a.type}: ${a.subject}` })
       return a
     })
+    if (created.type === 'task' && !created.completed_at) slackSafe(postTaskCard(created.id))
     res.status(201).json(await load(created.id))
   }),
 )
@@ -134,7 +137,9 @@ activitiesRouter.patch(
         if (action === 'complete') await touchDeal(after.deal_id, client)
       }
     })
-    res.json(await load(before.id))
+    const after = await load(before.id)
+    if (after?.type === 'task' || before.type === 'task') slackSafe(updateTaskCard(before.id, body.completed === true ? req.user.name : null))
+    res.json(after)
   }),
 )
 
@@ -147,6 +152,7 @@ activitiesRouter.delete(
       await query('DELETE FROM activities WHERE id = $1', [a.id], client)
       await audit(client, { entityType: 'activity', entityId: a.id, action: 'delete', actorId: req.user.id, changes: { type: a.type, subject: a.subject, deal_id: a.deal_id }, summary: `Deleted ${a.type}: ${a.subject}` })
     })
+    slackSafe(deleteTaskCard(a))
     res.json({ ok: true })
   }),
 )

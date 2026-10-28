@@ -21,6 +21,22 @@ export const config = {
     database: env.DB_NAME ?? 'crm',
   },
   googleClientId: env.GOOGLE_CLIENT_ID ?? '',
+  googleClientSecret: env.GOOGLE_CLIENT_SECRET ?? '',
+  // Public origin of the app, used to build the OAuth redirect URI.
+  appBaseUrl: (env.APP_BASE_URL ?? '').replace(/\/$/, ''),
+  // Key for encrypting Google refresh tokens at rest; falls back to SESSION_SECRET.
+  tokenEncryptionKey: env.TOKEN_ENCRYPTION_KEY ?? env.SESSION_SECRET ?? '',
+  // Shared secret for the scheduled /api/internal/sync endpoint (Cloud Scheduler).
+  syncSecret: env.SYNC_SECRET ?? '',
+  // Optional in-process sync timer (minutes). 0 = off; use Cloud Scheduler instead.
+  syncIntervalMinutes: int('SYNC_INTERVAL_MINUTES', 0),
+  // Slack two-way task sync.
+  slackBotToken: env.SLACK_BOT_TOKEN ?? '',
+  slackSigningSecret: env.SLACK_SIGNING_SECRET ?? '',
+  // Audit rows older than this are purged by the maintenance job. 0 = keep forever.
+  auditRetentionMonths: int('AUDIT_RETENTION_MONTHS', 6),
+  // Unmatched sync items older than this are purged.
+  unmatchedRetentionDays: int('UNMATCHED_RETENTION_DAYS', 90),
   allowedDomain: (env.ALLOWED_DOMAIN ?? 'ecolens.io').toLowerCase(),
   adminEmails: (env.ADMIN_EMAILS ?? '')
     .split(',')
