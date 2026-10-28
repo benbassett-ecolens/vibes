@@ -32,8 +32,8 @@ export function verifySlackSignature(rawBody: string, timestamp: string | undefi
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
-/** CRM user -> Slack user id, cached on users.slack_user_id. */
-export async function slackUserIdFor(userId: string): Promise<string | null> {
+/** CRM user -> Slack user id, cached on users.slack_user_id. Throws with Slack's reason when `strict`. */
+export async function slackUserIdFor(userId: string, strict = false): Promise<string | null> {
   const u = await one<{ email: string; slack_user_id: string | null }>('SELECT email, slack_user_id FROM users WHERE id = $1', [userId])
   if (!u) return null
   if (u.slack_user_id) return u.slack_user_id
@@ -41,7 +41,8 @@ export async function slackUserIdFor(userId: string): Promise<string | null> {
     const r = await slackCall<{ user: { id: string } }>('users.lookupByEmail', { email: u.email })
     await query('UPDATE users SET slack_user_id = $2 WHERE id = $1', [userId, r.user.id])
     return r.user.id
-  } catch {
+  } catch (e) {
+    if (strict) throw e
     return null
   }
 }

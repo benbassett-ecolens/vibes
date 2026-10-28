@@ -178,8 +178,19 @@ slackRouter.post(
       res.json({ slack_user_id: info.user.id, slack_email: info.user.profile?.email ?? null })
       return
     }
-    const id = await slackUserIdFor(req.user.id)
-    if (!id) throw forbidden(`No Slack user found with the email ${req.user.email}. Check the email on your Slack profile, or link by member ID.`)
+    let id: string | null = null
+    try {
+      id = await slackUserIdFor(req.user.id, true)
+    } catch (e) {
+      const reason = (e as Error).message
+      const hint = reason.includes('missing_scope')
+        ? 'The bot token lacks the users:read.email scope. Add it under OAuth & Permissions and reinstall the app.'
+        : reason.includes('users_not_found')
+          ? `Slack has no member whose primary email is ${req.user.email}. Check Slack → Profile, or link by member ID.`
+          : 'Check the Slack app configuration, or link by member ID.'
+      throw forbidden(`${reason}. ${hint}`)
+    }
+    if (!id) throw forbidden(`No Slack user found with the email ${req.user.email}. Link by member ID instead.`)
     res.json({ slack_user_id: id })
   }),
 )
