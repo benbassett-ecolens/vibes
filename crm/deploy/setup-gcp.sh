@@ -64,7 +64,9 @@ upsert_secret() { # name value
 }
 upsert_secret crm-db-password "$DB_PASSWORD"
 gcloud secrets describe crm-session-secret >/dev/null 2>&1 || upsert_secret crm-session-secret "$(openssl rand -hex 48)"
-gcloud secrets describe crm-sync-secret >/dev/null 2>&1 || upsert_secret crm-sync-secret "$(openssl rand -hex 32)"
+if [ "${ROTATE_SYNC_SECRET:-0}" = "1" ] || ! gcloud secrets describe crm-sync-secret >/dev/null 2>&1; then
+  upsert_secret crm-sync-secret "$(openssl rand -hex 32)"
+fi
 [ -n "$GOOGLE_CLIENT_SECRET" ] && upsert_secret crm-google-client-secret "$GOOGLE_CLIENT_SECRET"
 [ -n "$SLACK_BOT_TOKEN" ] && upsert_secret crm-slack-bot-token "$SLACK_BOT_TOKEN"
 [ -n "$SLACK_SIGNING_SECRET" ] && upsert_secret crm-slack-signing-secret "$SLACK_SIGNING_SECRET"
@@ -130,7 +132,7 @@ gcloud services enable cloudscheduler.googleapis.com >/dev/null
 SERVICE_URL="$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
 SYNC_SECRET_VALUE="$(gcloud secrets versions access latest --secret=crm-sync-secret)"
 if gcloud scheduler jobs describe crm-sync --location="$REGION" >/dev/null 2>&1; then
-  gcloud scheduler jobs update http crm-sync --location="$REGION" --schedule="$SYNC_SCHEDULE" --uri="${SERVICE_URL}/api/internal/sync" --http-method=POST --headers="Authorization=Bearer ${SYNC_SECRET_VALUE}" >/dev/null
+  gcloud scheduler jobs update http crm-sync --location="$REGION" --schedule="$SYNC_SCHEDULE" --uri="${SERVICE_URL}/api/internal/sync" --http-method=POST --update-headers="Authorization=Bearer ${SYNC_SECRET_VALUE}" >/dev/null
 else
   gcloud scheduler jobs create http crm-sync --location="$REGION" --schedule="$SYNC_SCHEDULE" --uri="${SERVICE_URL}/api/internal/sync" --http-method=POST --headers="Authorization=Bearer ${SYNC_SECRET_VALUE}" --attempt-deadline=600s >/dev/null
 fi
