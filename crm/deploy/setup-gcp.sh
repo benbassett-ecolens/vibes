@@ -22,7 +22,7 @@ GOOGLE_CLIENT_SECRET="${GOOGLE_CLIENT_SECRET:-}"  # same OAuth client; enables G
 SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-}"        # optional: Slack to-do sync (see README)
 SLACK_SIGNING_SECRET="${SLACK_SIGNING_SECRET:-}"
 SYNC_SCHEDULE="${SYNC_SCHEDULE:-*/10 * * * *}" # Cloud Scheduler cadence for sync + maintenance
-AUDIT_RETENTION_MONTHS="${AUDIT_RETENTION_MONTHS:-6}"
+AUDIT_RETENTION_MONTHS="${AUDIT_RETENTION_MONTHS:-12}"
 
 gcloud config set project "$PROJECT_ID" >/dev/null
 

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { api, qs } from '../api'
 import { useAuth } from '../auth'
-import { compactMoney, fmtDateTime, money, pct, relative } from '../format'
+import { compactMoney, fmtDate, fmtDateTime, money, pct, relative } from '../format'
 import { useQuery } from '../hooks'
 import { useRefData } from '../refdata'
 import { ACTIVITY_ICON } from '../components/Timeline'
@@ -27,6 +27,13 @@ export function Dashboard() {
       toast((e as Error).message, 'error')
     }
   }
+  const attention: Array<{ d: ReportSummary['stale_deals'][number]; label: string }> = s
+    ? [
+        ...s.close_overdue_deals.map((d) => ({ d, label: `close overdue · ${fmtDate(d.expected_close_date)}` })),
+        ...s.activity_overdue_deals.map((d) => ({ d, label: `${d.overdue_task_count} overdue activit${d.overdue_task_count === 1 ? 'y' : 'ies'}` })),
+        ...s.stale_deals.map((d) => ({ d, label: `rotting · idle ${relative(d.last_activity_at && d.last_activity_at > d.stage_entered_at ? d.last_activity_at : d.stage_entered_at)}` })),
+      ].slice(0, 10)
+    : []
   const linkFor = (e: AuditEntry) => (e.entity_type === 'deal' ? `/deals/${e.entity_id}` : e.entity_type === 'contact' ? `/contacts/${e.entity_id}` : e.entity_type === 'company' ? `/companies/${e.entity_id}` : null)
   return (
     <>
@@ -75,16 +82,17 @@ export function Dashboard() {
             </div>
           </div>
           <div className="card">
-            <div className="card-h"><h2>Needs attention</h2><span className="muted small right">rotting deals</span></div>
+            <div className="card-h"><h2>Needs attention</h2><span className="muted small right">close overdue · overdue activity · rotting</span></div>
             <div className="card-b" style={{ padding: 0 }}>
-              {(s?.stale_deals ?? []).slice(0, 8).map((d) => (
-                <Link key={d.id} to={`/deals/${d.id}`} className="row" style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', color: 'inherit' }}>
+              {attention.map(({ d, label }) => (
+                <Link key={`${d.id}-${label}`} to={`/deals/${d.id}`} className="row" style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', color: 'inherit' }}>
                   <span className="grow truncate">{d.title}</span>
                   <span className="badge">{d.stage_name}</span>
-                  <span className="small error">idle {relative(d.last_activity_at && d.last_activity_at > d.stage_entered_at ? d.last_activity_at : d.stage_entered_at)}</span>
+                  <span className="flag danger">{label}</span>
                 </Link>
               ))}
-              {s && !s.stale_deals.length && <div className="empty">Nothing is rotting. Nice.</div>}
+              {s && !attention.length && <div className="empty">Nothing needs attention. Nice.</div>}
+              {s && attention.length > 0 && <div className="row small" style={{ padding: '8px 16px' }}><Link to="/deals?flag=close_overdue">Close overdue ({s.close_overdue_deals.length})</Link><Link to="/deals?flag=activity_overdue">Overdue activity ({s.activity_overdue_deals.length})</Link><Link to="/deals?flag=rotting">Rotting ({s.stale_deals.length})</Link></div>}
             </div>
           </div>
           <div className="card">

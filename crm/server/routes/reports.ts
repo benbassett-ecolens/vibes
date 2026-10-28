@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { one, query } from '../db.js'
 import { badRequest, wrap } from '../http.js'
-import { DEAL_SELECT } from './deals.js'
+import { DEAL_SELECT, FLAG_SQL } from './deals.js'
 import type { Deal, ReportSummary } from '../../shared/types.js'
 
 export const reportsRouter = Router()
@@ -162,6 +162,19 @@ reportsRouter.get(
       params,
     )
 
+    const byDealType = await query<ReportSummary['by_deal_type'][number]>(
+      `SELECT d.deal_type,
+         COUNT(*) FILTER (WHERE s.kind = 'open')::int AS open_count,
+         COALESCE(SUM(d.amount) FILTER (WHERE s.kind = 'open'), 0) AS open_value,
+         COUNT(*) FILTER (WHERE s.kind = 'won' AND ${inRange})::int AS won_count,
+         COALESCE(SUM(d.amount) FILTER (WHERE s.kind = 'won' AND ${inRange}), 0) AS won_value
+       FROM deals d JOIN stages s ON s.id = d.stage_id WHERE ${scope}
+       GROUP BY d.deal_type ORDER BY array_position(ARRAY['new_business','renewal','upsell'], d.deal_type)`,
+      params,
+    )
+    const closeOverdue = await query<Deal>(`${DEAL_SELECT} WHERE ${scope} AND ${FLAG_SQL.close_overdue} ORDER BY d.expected_close_date ASC LIMIT 50`, scopeParams)
+    const activityOverdue = await query<Deal>(`${DEAL_SELECT} WHERE ${scope} AND ${FLAG_SQL.activity_overdue} ORDER BY next_activity_at ASC LIMIT 50`, scopeParams)
+
     const stale = await query<Deal>(
       `${DEAL_SELECT} WHERE ${scope} AND s.kind = 'open' AND s.rot_after_days IS NOT NULL
          AND COALESCE(d.last_activity_at, d.stage_entered_at) < now() - (s.rot_after_days || ' days')::interval
@@ -193,6 +206,9 @@ reportsRouter.get(
       funnel,
       activity_by_type: activityByType,
       by_product: byProduct,
+      by_deal_type: byDealType,
+      close_overdue_deals: closeOverdue,
+      activity_overdue_deals: activityOverdue,
       stale_deals: stale,
     }
     res.json({ filters: f, ...out })

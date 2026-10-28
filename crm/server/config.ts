@@ -34,7 +34,7 @@ export const config = {
   slackBotToken: env.SLACK_BOT_TOKEN ?? '',
   slackSigningSecret: env.SLACK_SIGNING_SECRET ?? '',
   // Audit rows older than this are purged by the maintenance job. 0 = keep forever.
-  auditRetentionMonths: int('AUDIT_RETENTION_MONTHS', 6),
+  auditRetentionMonths: int('AUDIT_RETENTION_MONTHS', 12),
   // Unmatched sync items older than this are purged.
   unmatchedRetentionDays: int('UNMATCHED_RETENTION_DAYS', 90),
   allowedDomain: (env.ALLOWED_DOMAIN ?? 'ecolens.io').toLowerCase(),

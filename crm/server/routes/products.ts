@@ -96,7 +96,7 @@ async function recomputeAmount(dealId: string, actorId: string, client: pg.PoolC
   const total = dealTotal(lines)
   await query('UPDATE deals SET amount = $2, amount_from_products = true WHERE id = $1', [dealId, total], client)
   if (Number(before.amount) !== total) {
-    await audit(client, { entityType: 'deal', entityId: dealId, action: 'update', actorId, changes: { amount: { from: before.amount, to: total } }, summary: 'Amount recalculated from products' })
+    await audit(client, { entityType: 'deal', entityId: dealId, action: 'update', actorId, changes: { amount: { from: before.amount, to: total } }, summary: 'First-year value recalculated from products' })
   }
 }
 

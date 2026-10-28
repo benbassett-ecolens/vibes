@@ -23,7 +23,9 @@ enterprise sprawl is not.
 | **Gmail & Calendar sync** | Each person connects their own Google account (Settings). Emails and calendar invites that involve a CRM contact are logged automatically as email/meeting activities on the right deal, with a link back to Gmail/Calendar. Senders we cannot match are listed so you can create the contact in one click. Customer emails reset a deal's rot timer. |
 | **Slack to-dos** | Every task assigned to you is mirrored to a Slack DM with a **Mark done** button. Done in Slack = done in the CRM; done in the CRM updates the Slack card. `/todo <what> \| <when>` in Slack creates a CRM task. A nudge lands in the card's thread when the task comes due. |
 | **Products** | A product catalogue (one-time, monthly, or percent-of-basis pricing). Add lines to a deal and the deal amount becomes the sum of the lines; reports show revenue by product. |
-| **Required fields** | A deal cannot be created without a company, a main contact that has an email address, and a scheduled next activity (date + description). Deal pages warn when no next activity is scheduled. |
+| **Required fields** | A deal cannot be created without a company, a main contact that has an email address, an expected close date, a lead source, a deal type (new business / renewal / upsell) and a scheduled next activity (date + description). Contract length is optional at creation and required to close won. |
+| **Flags** | Every open deal is checked for: close date overdue, overdue activity, no next step, rotting. Flags appear on board cards, in the list (with a filter), on the deal page, on the dashboard and in Reports. |
+| **Renewals** | Closing a deal won creates its renewal deal automatically: same company, contact, owner and products, expected close = close date + contract length, and a task 90 days before to start the renewal conversation. |
 | **Users & roles** | Anyone with an `@ecolens.io` Workspace account is created on first sign-in as a member. Admins (seeded from `ADMIN_EMAILS`, or promoted in Settings) manage pipelines, stages, lost reasons and users, and can deactivate accounts. |
 
 ## The login gate
@@ -100,23 +102,24 @@ writes the audit entry (`via: slack`) and updates the card. Slack's own "Later /
 public API, so the card-in-DM is the integration point. Users link their Slack account by email
 automatically; Settings has a "Send test DM" and "Send my open tasks to Slack" button.
 
-## Products & pricing
+## Products & deal value
 
-Settings → Products. Three pricing types:
+Settings → Products. The deal's **amount is its first-year value**, computed from its product lines:
 
-| Type | Line total |
-| --- | --- |
-| One-time | quantity × unit price |
-| Monthly | quantity × unit price × term months (default 12) |
-| % of basis | basis amount × unit price % |
+| Type | First-year value | Contract value |
+| --- | --- | --- |
+| One-time $ | quantity × dollar value | same |
+| Monthly $ | quantity × monthly amount × 12 | quantity × monthly amount × contract months |
+| % of basis | basis amount × percent | same |
 
-The seeded catalogue (Core ERP Monthly Retainer, Core ERP SQL, Core ERP Closed Won %, EcoNet
-subscription fee, AI build fee, AI monthly) has zero default prices; set them in Settings. Once a
-deal has any line, its amount is derived from the lines (the Amount field becomes read-only).
+So a deal with a $2,500 retainer, $15,000 of SQL work and an $8,000 Closed Won estimate is worth
+$53,000 in year one, and $113,000 over a 36-month contract (shown on the deal page once a contract
+length is set). Core ERP SQL and Core ERP Closed Won % are entered as dollar values per deal. Once
+a deal has any line, its amount is derived from the lines and the Amount field becomes read-only.
 
 ## Retention
 
-`AUDIT_RETENTION_MONTHS` (default 6) purges `audit_log` rows older than that on each scheduled
+`AUDIT_RETENTION_MONTHS` (default 12) purges `audit_log` rows older than that on each scheduled
 run; `0` keeps everything. Stage history, activities and synced emails are never purged (reports
 depend on them). `UNMATCHED_RETENTION_DAYS` (default 90) trims the unmatched-sender list. Export
 the audit log CSV before lowering retention if you want an archive.
@@ -136,7 +139,7 @@ crm/
     maintenance.ts retention purges + Slack due-now nudges
     migrate.ts     forward-only SQL migrator (runs on boot)
     seed.ts        demo data for local development
-  migrations/      001 schema · 002 Google sync · 003 products, Slack, required fields
+  migrations/      001 schema · 002 Google sync · 003 products, Slack · 004 deal type, contract, renewals
   shared/types.ts  API types shared by server and client
   src/             React 18 + Vite + react-router + recharts
     pages/         Dashboard, Deals (board + list), DealDetail, Contacts, ContactDetail,
@@ -221,7 +224,7 @@ revisions.
 | `SYNC_SECRET` | Bearer token Cloud Scheduler uses for `POST /api/internal/sync` |
 | `SYNC_INTERVAL_MINUTES` | Optional in-process sync timer (needs `min-instances=1`) |
 | `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET` | Enable Slack to-do sync |
-| `AUDIT_RETENTION_MONTHS`, `UNMATCHED_RETENTION_DAYS` | Retention (6 months / 90 days by default) |
+| `AUDIT_RETENTION_MONTHS`, `UNMATCHED_RETENTION_DAYS` | Retention (12 months / 90 days by default) |
 
 ## API sketch
 
@@ -237,7 +240,8 @@ GET/POST/DELETE /api/lost-reasons
 GET/POST /api/companies   GET/PATCH /api/companies/:id   POST /api/companies/:id/archive[?restore=true]
 GET/POST /api/contacts    GET/PATCH /api/contacts/:id    POST /api/contacts/:id/archive
 GET/POST /api/deals       GET /api/deals/board?pipeline_id=…   GET/PATCH/DELETE /api/deals/:id
-POST /api/deals/:id/move {stage_id, position, lost_reason}     GET /api/deals/:id/timeline
+   list filters: q, owner_id, stage_id, status, deal_type, flag=close_overdue|activity_overdue|no_next_step|rotting
+POST /api/deals/:id/move {stage_id, position, lost_reason, contract_months}     GET /api/deals/:id/timeline
 GET/POST /api/activities  PATCH/DELETE /api/activities/:id ({completed: true} marks done)
 GET  /api/audit?entity_type&entity_id&actor_id
 GET/POST/PATCH/DELETE /api/deals/:id/products[/:lineId]

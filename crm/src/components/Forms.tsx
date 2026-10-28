@@ -4,6 +4,7 @@ import { useAuth } from '../auth'
 import { useRefData } from '../refdata'
 import { Field, Modal, useToast } from './ui'
 import { toLocalInputDateTime, fromLocalInputDateTime } from '../format'
+import { DEAL_TYPES, DEAL_TYPE_LABEL } from '../../shared/pricing'
 import { CompanyPicker, ContactPicker, OwnerSelect } from './Pickers'
 import type { Company, Contact, Deal } from '../../shared/types'
 
@@ -26,6 +27,8 @@ export function DealForm({ initial, onClose, onSaved, defaults }: { initial?: De
     owner_id: base?.owner_id ?? user?.id ?? null,
     expected_close_date: base?.expected_close_date ?? '',
     lead_source: base?.lead_source ?? '',
+    deal_type: base?.deal_type ?? 'new_business',
+    contract_months: base?.contract_months?.toString() ?? '',
     description: base?.description ?? '',
     contact_email: null as string | null,
     next_subject: '',
@@ -48,6 +51,8 @@ export function DealForm({ initial, onClose, onSaved, defaults }: { initial?: De
         if (!form.next_subject.trim()) throw new Error('Next activity description is required')
         if (!form.next_due) throw new Error('Next activity date is required')
       }
+      if (!form.expected_close_date) throw new Error('Expected close date is required')
+      if (!form.lead_source.trim()) throw new Error('Lead source is required')
       const body = {
         title: form.title,
         pipeline_id: pipelineId,
@@ -58,7 +63,9 @@ export function DealForm({ initial, onClose, onSaved, defaults }: { initial?: De
         contact_id: form.contact_id,
         owner_id: form.owner_id,
         expected_close_date: form.expected_close_date || null,
-        lead_source: form.lead_source || null,
+        lead_source: form.lead_source.trim(),
+        deal_type: form.deal_type,
+        contract_months: form.contract_months === '' ? null : Number(form.contract_months),
         description: form.description || null,
         ...(initial ? {} : { next_activity: { subject: form.next_subject.trim(), due_at: fromLocalInputDateTime(form.next_due), type: form.next_type } }),
       }
@@ -87,7 +94,7 @@ export function DealForm({ initial, onClose, onSaved, defaults }: { initial?: De
               {pipeline?.stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </Field>
-          <Field label={initial?.amount_from_products ? 'Amount (from products)' : 'Amount'}><input className="input" type="number" min="0" step="0.01" value={form.amount} disabled={!!initial?.amount_from_products} onChange={(e) => set({ amount: e.target.value })} /></Field>
+          <Field label={initial?.amount_from_products ? 'First-year value (from products)' : 'First-year value'}><input className="input" type="number" min="0" step="0.01" value={form.amount} disabled={!!initial?.amount_from_products} onChange={(e) => set({ amount: e.target.value })} /></Field>
           <Field label="Currency"><input className="input" maxLength={3} value={form.currency} onChange={(e) => set({ currency: e.target.value.toUpperCase() })} /></Field>
           <Field label="Company *"><CompanyPicker value={form.company_id} label={form.company_name} onChange={(id, c) => set({ company_id: id, company_name: c?.name ?? null })} /></Field>
           <Field label="Main contact *">
@@ -96,8 +103,14 @@ export function DealForm({ initial, onClose, onSaved, defaults }: { initial?: De
             {form.contact_email && <span className="muted small">{form.contact_email}</span>}
           </Field>
           <Field label="Owner"><OwnerSelect value={form.owner_id} onChange={(id) => set({ owner_id: id })} /></Field>
-          <Field label="Expected close"><input className="input" type="date" value={form.expected_close_date} onChange={(e) => set({ expected_close_date: e.target.value })} /></Field>
-          <Field label="Lead source"><input className="input" list="lead-sources" placeholder="Referral, inbound, event…" value={form.lead_source} onChange={(e) => set({ lead_source: e.target.value })} /><datalist id="lead-sources"><option value="Referral" /><option value="Inbound" /><option value="Outbound" /><option value="Event" /><option value="Partner" /><option value="Existing customer" /></datalist></Field>
+          <Field label="Expected close *"><input className="input" type="date" required value={form.expected_close_date} onChange={(e) => set({ expected_close_date: e.target.value })} /></Field>
+          <Field label="Lead source *"><input className="input" required list="lead-sources" placeholder="Referral, inbound, event…" value={form.lead_source} onChange={(e) => set({ lead_source: e.target.value })} /><datalist id="lead-sources"><option value="Referral" /><option value="Inbound" /><option value="Outbound" /><option value="Event" /><option value="Partner" /><option value="Existing customer" /><option value="Renewal" /></datalist></Field>
+          <Field label="Deal type *">
+            <select className="select" value={form.deal_type} onChange={(e) => set({ deal_type: e.target.value as typeof form.deal_type })}>
+              {DEAL_TYPES.map((t) => <option key={t} value={t}>{DEAL_TYPE_LABEL[t]}</option>)}
+            </select>
+          </Field>
+          <Field label="Contract length (months)"><input className="input" type="number" min={1} max={240} placeholder="required to close won" value={form.contract_months} onChange={(e) => set({ contract_months: e.target.value })} /></Field>
           {!initial && (
             <>
               <Field label="Next activity *" span2>

@@ -8,6 +8,8 @@ import { useRefData } from '../refdata'
 import { OwnerSelect } from '../components/Pickers'
 import { Stat } from '../components/ui'
 import type { ReportSummary } from '../../shared/types'
+import { DEAL_TYPE_LABEL } from '../../shared/pricing'
+import { fmtDate } from '../format'
 
 const SERIES = { won: '#1baf7a', lost: '#e34948', s1: '#2a78d6' }
 const FORECAST_LABEL: Record<string, string> = { commit: 'Commit', best_case: 'Best case', pipeline: 'Pipeline', closed: 'Closed', omitted: 'Omitted' }
@@ -206,10 +208,39 @@ export function ReportsPage() {
               </div>
             </div>
 
+            <div className="grid c2" style={{ marginBottom: 16 }}>
+              <div className="card">
+                <div className="card-h"><h2>By deal type</h2><span className="muted small right">new business vs renewal vs upsell</span></div>
+                <table className="table">
+                  <thead><tr><th>Type</th><th className="num">Open</th><th className="num">Open value</th><th className="num">Won</th><th className="num">Won value</th></tr></thead>
+                  <tbody>
+                    {s.by_deal_type.map((t) => (
+                      <tr key={t.deal_type}><td>{DEAL_TYPE_LABEL[t.deal_type]}</td><td className="num">{t.open_count}</td><td className="num">{money(t.open_value)}</td><td className="num">{t.won_count}</td><td className="num">{money(t.won_value)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="card">
+                <div className="card-h"><h2>Overdue</h2><span className="muted small right">close dates and activities past due</span></div>
+                <table className="table">
+                  <thead><tr><th>Deal</th><th>Owner</th><th>Flag</th></tr></thead>
+                  <tbody>
+                    {s.close_overdue_deals.map((d) => (
+                      <tr key={`c${d.id}`}><td><Link to={`/deals/${d.id}`}>{d.title}</Link></td><td>{d.owner_name ?? '—'}</td><td><span className="flag danger">close overdue · {fmtDate(d.expected_close_date)}</span></td></tr>
+                    ))}
+                    {s.activity_overdue_deals.map((d) => (
+                      <tr key={`a${d.id}`}><td><Link to={`/deals/${d.id}`}>{d.title}</Link></td><td>{d.owner_name ?? '—'}</td><td><span className="flag danger">{d.overdue_task_count} overdue activit{d.overdue_task_count === 1 ? 'y' : 'ies'}</span></td></tr>
+                    ))}
+                    {!s.close_overdue_deals.length && !s.activity_overdue_deals.length && <tr><td colSpan={3} className="empty">Nothing overdue.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <div className="card" style={{ marginBottom: 16 }}>
               <div className="card-h"><h2>Revenue by product</h2><span className="muted small right">line totals on open deals now, and on deals won in range</span></div>
               <table className="table">
-                <thead><tr><th>Product</th><th>Pricing</th><th className="num">Open deals</th><th className="num">Open value</th><th className="num">Won deals</th><th className="num">Won value</th></tr></thead>
+                <thead><tr><th>Product</th><th>Pricing</th><th className="num">Open deals</th><th className="num">Open first-year value</th><th className="num">Won deals</th><th className="num">Won first-year value</th></tr></thead>
                 <tbody>
                   {s.by_product.map((p) => (
                     <tr key={p.product_id}><td>{p.product_name}</td><td className="muted small">{p.pricing_type.replace('_', ' ')}</td><td className="num">{p.open_deals}</td><td className="num">{money(p.open_amount)}</td><td className="num">{p.won_deals}</td><td className="num">{money(p.won_amount)}</td></tr>

@@ -40,11 +40,11 @@ export function DealProducts({ dealId, currency, onChanged }: { dealId: string; 
   )
   return (
     <div className="card">
-      <div className="card-h"><h2>Products</h2><span className="muted small right">{items.length ? 'deal amount = sum of lines' : 'add products to price the deal'}</span></div>
+      <div className="card-h"><h2>Products</h2><span className="muted small right">{items.length ? 'first-year value = one-time $ + monthly $ × 12' : 'add products to price the deal'}</span></div>
       <div className="card-b" style={{ padding: items.length ? 0 : 16 }}>
         {items.length > 0 && (
           <table className="table">
-            <thead><tr><th>Product</th><th>Pricing</th><th className="num">Qty</th><th className="num">Unit price</th><th className="num">Months / basis</th><th className="num">Line total</th><th /></tr></thead>
+            <thead><tr><th>Product</th><th>Pricing</th><th className="num">Qty</th><th className="num">Unit price</th><th className="num">Basis</th><th className="num">First-year value</th><th /></tr></thead>
             <tbody>
               {items.map((l) => (
                 <tr key={l.id}>
@@ -52,12 +52,12 @@ export function DealProducts({ dealId, currency, onChanged }: { dealId: string; 
                   <td className="muted small">{PRICING_LABEL[l.pricing_type]}</td>
                   <td className="num">{l.pricing_type === 'percent' ? '—' : num(l, 'quantity', '1', 64)}</td>
                   <td className="num">{num(l, 'unit_price')}{l.pricing_type === 'percent' && <span className="muted small"> %</span>}</td>
-                  <td className="num">{l.pricing_type === 'monthly' ? num(l, 'term_months', '1', 64) : l.pricing_type === 'percent' ? num(l, 'basis_amount', '0.01', 120) : '—'}</td>
+                  <td className="num">{l.pricing_type === 'percent' ? num(l, 'basis_amount', '0.01', 120) : l.pricing_type === 'monthly' ? <span className="muted small">× 12</span> : '—'}</td>
                   <td className="num"><strong>{money(l.line_total, currency)}</strong></td>
                   <td><ConfirmButton className="btn ghost sm" label="✕" confirmLabel="Remove?" onConfirm={() => run(() => api.delete(`/api/deals/${dealId}/products/${l.id}`), 'Removed')} /></td>
                 </tr>
               ))}
-              <tr><td colSpan={5} className="num"><strong>Total</strong></td><td className="num"><strong>{money(total, currency)}</strong></td><td /></tr>
+              <tr><td colSpan={5} className="num"><strong>First-year total</strong></td><td className="num"><strong>{money(total, currency)}</strong></td><td /></tr>
             </tbody>
           </table>
         )}

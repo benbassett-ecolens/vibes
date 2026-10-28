@@ -15,6 +15,8 @@ export interface User {
 }
 
 export type StageKind = 'open' | 'won' | 'lost'
+export type DealType = 'new_business' | 'renewal' | 'upsell'
+export type DealFlag = 'close_overdue' | 'activity_overdue' | 'no_next_step' | 'rotting'
 export type ForecastCategory = 'pipeline' | 'best_case' | 'commit' | 'closed' | 'omitted'
 
 export interface Stage {
@@ -101,6 +103,13 @@ export interface Deal {
   lost_reason: string | null
   lead_source: string | null
   amount_from_products: boolean
+  deal_type: DealType
+  contract_months: number | null
+  renewal_of_deal_id: string | null
+  renewal_of_title?: string | null
+  renewal_deal_id?: string | null
+  renewal_created_at: string | null
+  contract_value?: number | null
   description: string | null
   position: number
   stage_entered_at: string
@@ -347,6 +356,9 @@ export interface ReportSummary {
   lost_reasons: { reason: string; deal_count: number; total_amount: number }[]
   funnel: { stage_id: string; stage_name: string; position: number; reached: number }[]
   activity_by_type: { type: ActivityType; count: number }[]
+  by_deal_type: { deal_type: DealType; open_count: number; open_value: number; won_count: number; won_value: number }[]
+  close_overdue_deals: Deal[]
+  activity_overdue_deals: Deal[]
   by_product: { product_id: string; product_name: string; pricing_type: PricingType; open_deals: number; open_amount: number; won_deals: number; won_amount: number }[]
   stale_deals: Deal[]
 }
