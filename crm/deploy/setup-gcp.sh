@@ -37,7 +37,7 @@ gcloud artifacts repositories describe "$REPO" --location="$REGION" >/dev/null 2
 
 echo "▶ Cloud SQL instance: $SQL_INSTANCE (this takes a few minutes the first time)"
 if ! gcloud sql instances describe "$SQL_INSTANCE" >/dev/null 2>&1; then
-  gcloud sql instances create "$SQL_INSTANCE" --database-version=POSTGRES_16 --tier="$SQL_TIER" \
+  gcloud sql instances create "$SQL_INSTANCE" --database-version=POSTGRES_16 --edition=enterprise --tier="$SQL_TIER" \
     --region="$REGION" --storage-auto-increase --backup-start-time=03:00 --availability-type=zonal
 fi
 gcloud sql databases describe "$DB_NAME" --instance="$SQL_INSTANCE" >/dev/null 2>&1 || \
