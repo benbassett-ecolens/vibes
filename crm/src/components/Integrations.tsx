@@ -172,6 +172,8 @@ export function SlackCard() {
   const toast = useToast()
   const status = useQuery(() => api.get<SlackStatus>('/api/slack/status'), [])
   const [busy, setBusy] = useState(false)
+  const [memberId, setMemberId] = useState('')
+  const [showManual, setShowManual] = useState(false)
   const s = status.data
   const run = async (fn: () => Promise<unknown>, msg?: string) => {
     setBusy(true)
@@ -203,9 +205,18 @@ export function SlackCard() {
             </p>
             <div className="row wrap">
               {!s.me_linked && <button className="btn primary sm" disabled={busy} onClick={() => run(() => api.post('/api/slack/link'), 'Linked by email')}>Link my Slack account</button>}
-              <button className="btn sm" disabled={busy} onClick={() => run(() => api.post('/api/slack/test'), 'Sent you a DM')}>Send test DM</button>
-              <button className="btn sm" disabled={busy} onClick={() => run(() => api.post<{ sent: number }>('/api/slack/resend').then((r) => toast(`Sent ${r.sent} task card(s)`)))}>Send my open tasks to Slack</button>
+              {!s.me_linked && <button className="btn sm" onClick={() => setShowManual((v) => !v)}>Link by member ID instead</button>}
+              {s.me_linked && <button className="btn sm" disabled={busy} onClick={() => run(() => api.delete('/api/slack/link'), 'Unlinked')}>Unlink</button>}
+              <button className="btn sm" disabled={busy || !s.me_linked} onClick={() => run(() => api.post('/api/slack/test'), 'Sent you a DM')}>Send test DM</button>
+              <button className="btn sm" disabled={busy || !s.me_linked} onClick={() => run(() => api.post<{ sent: number }>('/api/slack/resend').then((r) => toast(`Sent ${r.sent} task card(s)`)))}>Send my open tasks to Slack</button>
             </div>
+            {showManual && !s.me_linked && (
+              <form className="row wrap" style={{ marginTop: 10 }} onSubmit={(e) => { e.preventDefault(); run(() => api.post('/api/slack/link', { slack_user_id: memberId.trim().toUpperCase() }), 'Linked').then(() => setShowManual(false)) }}>
+                <span className="small muted">In Slack: your avatar → Profile → ⋮ (three dots) → <strong>Copy member ID</strong>. It starts with U or W.</span>
+                <input className="input sm" placeholder="U0123ABCDEF" value={memberId} onChange={(e) => setMemberId(e.target.value)} style={{ width: 180 }} />
+                <button className="btn primary sm" disabled={busy || !/^[UW][A-Z0-9]{6,}$/i.test(memberId.trim())}>Link</button>
+              </form>
+            )}
           </>
         )}
       </div>

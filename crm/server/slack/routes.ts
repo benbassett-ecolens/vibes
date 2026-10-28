@@ -166,9 +166,29 @@ slackRouter.post(
   '/link',
   wrap(async (req, res) => {
     if (!slackConfigured()) throw forbidden('Slack is not configured')
+    const body = parse(z.object({ slack_user_id: z.string().regex(/^[UW][A-Z0-9]{6,}$/).optional() }), req.body ?? {})
+    if (body.slack_user_id) {
+      // Manual link by member ID: verify the ID exists and belongs to a real, non-bot user.
+      const info = await slackCall<{ user: { id: string; is_bot?: boolean; deleted?: boolean; profile?: { email?: string; real_name?: string } } }>('users.info', { user: body.slack_user_id })
+      if (info.user.is_bot || info.user.deleted) throw forbidden('That Slack member ID is a bot or a deactivated account')
+      const taken = await one<{ email: string }>('SELECT email FROM users WHERE slack_user_id = $1 AND id <> $2', [info.user.id, req.user.id])
+      if (taken) throw forbidden(`That Slack account is already linked to ${taken.email}`)
+      await query('UPDATE users SET slack_user_id = $2 WHERE id = $1', [req.user.id, info.user.id])
+      await audit(pool, { entityType: 'user', entityId: req.user.id, action: 'update', actorId: req.user.id, changes: { slack_user_id: { from: null, to: info.user.id }, slack_email: info.user.profile?.email ?? null }, summary: `${req.user.name} linked Slack (${info.user.profile?.real_name ?? info.user.id})` })
+      res.json({ slack_user_id: info.user.id, slack_email: info.user.profile?.email ?? null })
+      return
+    }
     const id = await slackUserIdFor(req.user.id)
-    if (!id) throw forbidden(`No Slack user found with the email ${req.user.email}`)
+    if (!id) throw forbidden(`No Slack user found with the email ${req.user.email}. Check the email on your Slack profile, or link by member ID.`)
     res.json({ slack_user_id: id })
+  }),
+)
+
+slackRouter.delete(
+  '/link',
+  wrap(async (req, res) => {
+    await query('UPDATE users SET slack_user_id = NULL WHERE id = $1', [req.user.id])
+    res.json({ ok: true })
   }),
 )
 
