@@ -88,8 +88,8 @@ googleRouter.get(
     await saveConnection(userId, googleEmail, tokens.refresh_token, scopes)
     await query('UPDATE google_connections SET gmail_sync_enabled = $2, calendar_sync_enabled = $3 WHERE user_id = $1', [userId, scopes.includes(GMAIL_SCOPE), scopes.includes(CALENDAR_SCOPE)])
     await audit(pool, { entityType: 'user', entityId: userId, action: 'update', actorId: userId, changes: { google_connection: { from: null, to: googleEmail } }, summary: `${user.name} connected Google (${scopes.filter((s) => s.includes('gmail') || s.includes('calendar')).map((s) => s.split('/').pop()).join(', ')})` })
-    // First sync in the background so the redirect is instant.
-    syncUser(userId, 'connect').catch((e) => console.error('initial sync failed', e))
+    // The client triggers the first sync as a normal request right after this redirect:
+    // Cloud Run only guarantees CPU while a request is in flight, so no background work here.
     return done('connected')
   }),
 )
@@ -135,7 +135,8 @@ googleRouter.post(
   wrap(async (req, res) => {
     const conn = await loadConnection(req.user.id)
     if (!conn) throw badRequest('Connect your Google account first')
-    const result = await syncUser(req.user.id, 'manual')
+    const trigger = req.query.first === 'true' ? 'connect' : 'manual'
+    const result = await syncUser(req.user.id, trigger)
     res.json({ ...result, status: await status(req.user.id) })
   }),
 )

@@ -6,6 +6,9 @@ import { createDueRenewals } from './routes/deals.js'
 
 export async function runMaintenance(): Promise<{ audit_purged: number; unmatched_purged: number; nudged: number; renewals_created: number }> {
   const renewalsCreated = await createDueRenewals()
+  // Runs that never finished (instance shut down mid-sync) must not look alive forever.
+  await query(`UPDATE sync_runs SET status = 'error', finished_at = now(), error = 'Interrupted (server restarted); the next scheduled run will pick up where this left off'
+               WHERE status = 'running' AND started_at < now() - interval '30 minutes'`)
   let auditPurged = 0
   if (config.auditRetentionMonths > 0) {
     const r = await query<{ id: number }>(`DELETE FROM audit_log WHERE created_at < now() - ($1 || ' months')::interval RETURNING id`, [String(config.auditRetentionMonths)])

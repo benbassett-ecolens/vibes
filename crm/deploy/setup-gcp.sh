@@ -100,7 +100,7 @@ gcloud run deploy "$SERVICE" --image="$IMAGE" --region="$REGION" --platform=mana
   --add-cloudsql-instances="$CONNECTION_NAME" \
   --set-env-vars="NODE_ENV=production,CLOUD_SQL_CONNECTION_NAME=${CONNECTION_NAME},DB_USER=${DB_USER},DB_NAME=${DB_NAME},ALLOWED_DOMAIN=${ALLOWED_DOMAIN},ADMIN_EMAILS=${ADMIN_EMAILS},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},APP_BASE_URL=${APP_BASE_URL},AUDIT_RETENTION_MONTHS=${AUDIT_RETENTION_MONTHS}" \
   --set-secrets="$SECRET_BINDINGS" \
-  --min-instances=0 --max-instances=3 --memory=512Mi --cpu=1 --port=8080
+  --min-instances=0 --max-instances=3 --memory=512Mi --cpu=1 --port=8080 --timeout=900
 
 # The app enforces @ecolens.io sign-in itself, so the service must be reachable without a Google IAM check.
 # Organizations created recently enforce "domain restricted sharing", which blocks allUsers; detect and explain.

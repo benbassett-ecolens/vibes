@@ -70,6 +70,14 @@ export function GoogleCard() {
     const next = new URLSearchParams(params)
     next.delete('google')
     setParams(next, { replace: true })
+    if (flash === 'connected') {
+      // Kick off the first sync as a foreground request (see server/google/routes.ts).
+      setBusy(true)
+      api.post('/api/google/sync?first=true')
+        .then(() => toast('First sync finished'))
+        .catch((e) => toast((e as Error).message, 'error'))
+        .finally(() => { setBusy(false); status.refresh(); unmatched.refresh() })
+    }
   }, [flash]) // eslint-disable-line react-hooks/exhaustive-deps
   // Poll briefly after connecting so the first run shows up.
   useEffect(() => {
@@ -121,7 +129,7 @@ export function GoogleCard() {
             </dl>
             {conn.last_error && <div className="error-box" style={{ marginBottom: 12 }}>{conn.last_error}</div>}
             <div className="row wrap" style={{ marginBottom: 12 }}>
-              <button className="btn primary sm" disabled={busy} onClick={() => run(() => api.post('/api/google/sync'), 'Sync finished')}>Sync now</button>
+              <button className="btn primary sm" disabled={busy} onClick={() => run(() => api.post('/api/google/sync'), 'Sync finished')}>{busy ? 'Syncing…' : 'Sync now'}</button>
               <button className="btn sm" onClick={() => setShowUnmatched((v) => !v)}>{s.unmatched_count} unmatched sender{s.unmatched_count === 1 ? '' : 's'}</button>
               <a className="btn sm" href="/api/google/connect">Reconnect</a>
               <button className="btn danger sm right" disabled={busy} onClick={() => run(() => api.delete('/api/google/connection'), 'Disconnected')}>Disconnect</button>
