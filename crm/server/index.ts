@@ -86,8 +86,8 @@ export function createApp(): express.Express {
   const clientDir = path.resolve(here, '..', '..', 'client')
   app.use(express.static(clientDir, { index: false, maxAge: '1h' }))
   app.get('*splat', (_req, res) => {
-    res.setHeader('Cache-Control', 'no-store')
-    res.sendFile(path.join(clientDir, 'index.html'), (err) => {
+    // Hashed assets may be cached for an hour; the page itself must always be fetched fresh.
+    res.sendFile(path.join(clientDir, 'index.html'), { cacheControl: false, headers: { 'Cache-Control': 'no-store, must-revalidate', Pragma: 'no-cache', Expires: '0' } }, (err) => {
       if (err) res.status(404).send('Client build not found. Run `npm run build`.')
     })
   })
