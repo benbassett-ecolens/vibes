@@ -221,9 +221,7 @@ googleRouter.post(
       await query('UPDATE contacts SET company_id = COALESCE(company_id, $2) WHERE id = $1', [contact.id, companyId])
       await propagateLink(pool, contact.id, companyId, body.email, req.user.id)
     }
-    // Log the item now that it matches; forget the unmatched record so the next sync picks the rest.
-    await query('DELETE FROM sync_unmatched WHERE user_id = $1 AND source = $2 AND addresses @> $3::jsonb', [req.user.id, item.source, JSON.stringify([{ email: body.email.toLowerCase() }])])
-    await query(`UPDATE google_connections SET gmail_synced_through = NULL, calendar_sync_token = NULL WHERE user_id = $1`, [req.user.id])
+    // The next sync re-checks pending unmatched items against the new contact and logs them.
     syncUser(req.user.id, 'manual').catch(() => {})
     res.status(201).json({ contact_id: contact.id })
   }),

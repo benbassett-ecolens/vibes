@@ -43,10 +43,21 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
   const fake: Fetcher = {
     async get<T>(url: string, params: Record<string, unknown> = {}): Promise<T> {
       calls.push(url + (params.syncToken ? ' (incremental)' : ''))
-      if (url.endsWith('/users/me/messages')) return { messages: state.messages.map((m) => ({ id: m.id })) } as T
+      if (url.endsWith('/users/me/messages')) {
+        const q = String(params.q ?? '')
+        if (q.startsWith('rfc822msgid:')) {
+          const want = q.slice('rfc822msgid:'.length)
+          const hit = state.messages.find((m) => m.payload.headers.some((h) => h.name === 'Message-ID' && h.value === `<${want}>`))
+          return { messages: hit ? [{ id: hit.id }] : [] } as T
+        }
+        return { messages: state.messages.map((m) => ({ id: m.id })) } as T
+      }
       const m = state.messages.find((x) => url.endsWith(`/messages/${x.id}`))
       if (m) return m as T
-      if (url.includes('/calendars/primary/events')) return { items: state.events, nextSyncToken: state.syncToken } as T
+      if (url.includes('/calendars/primary/events')) {
+        if (params.iCalUID) return { items: state.events.filter((e) => e.iCalUID === params.iCalUID) } as T
+        return { items: state.events, nextSyncToken: state.syncToken } as T
+      }
       throw new Error(`unexpected url ${url}`)
     },
   }
@@ -121,5 +132,24 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
     expect((await query(`SELECT 1 FROM activities WHERE source = 'gmail' AND external_id = $1`, [`m1-${uniq}@x`])).length).toBe(1)
     const conn = await one<{ calendar_sync_token: string }>('SELECT calendar_sync_token FROM google_connections WHERE user_id = $1', [userId])
     expect(conn?.calendar_sync_token).toBe('tok-2')
+  })
+
+  it('re-evaluates earlier unmatched items once a contact exists, and linking a company carries them onto its deal', async () => {
+    const { propagateLink } = await import('../routes/linker.js')
+    // The cold inbound sender becomes a contact (no company yet).
+    const stranger = (await one<{ id: string }>(`INSERT INTO contacts (first_name, email) VALUES ('Stranger', $1) RETURNING id`, [`stranger-${uniq}@elsewhere.test`]))!
+    const r = await syncUser(userId, 'manual', fake)
+    expect(r.errors).toEqual([])
+    const act = await one<{ id: string; contact_id: string; deal_id: string | null; company_id: string | null }>(`SELECT id, contact_id, deal_id, company_id FROM activities WHERE source = 'gmail' AND external_id = $1`, [`m2-${uniq}@x`])
+    expect(act?.contact_id).toBe(stranger.id)
+    expect(act?.deal_id).toBeNull()
+    expect(await one(`SELECT 1 FROM sync_unmatched WHERE external_id = $1 AND dismissed_at IS NULL`, [`m2-${uniq}@x`])).toBeNull()
+    // Now link the contact to the company: the email moves onto the company's deal.
+    const companyId = (await one<{ id: string }>('SELECT company_id AS id FROM deals WHERE id = $1', [dealId]))!.id
+    await query('UPDATE contacts SET company_id = $2 WHERE id = $1', [stranger.id, companyId])
+    await propagateLink(pool, stranger.id, companyId, `stranger-${uniq}@elsewhere.test`, userId)
+    const after = await one<{ deal_id: string | null; company_id: string | null }>('SELECT deal_id, company_id FROM activities WHERE id = $1', [act!.id])
+    expect(after?.company_id).toBe(companyId)
+    expect(after?.deal_id).toBe(dealId)
   })
 })

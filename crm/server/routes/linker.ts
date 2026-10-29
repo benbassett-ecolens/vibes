@@ -7,6 +7,7 @@ import { one, query, withTransaction } from '../db.js'
 import { parse, wrap } from '../http.js'
 import { config } from '../config.js'
 import { FREE_MAIL, bestCompanyForDomain } from '../../shared/match.js'
+import { pickDeal } from '../google/sync.js'
 
 type CompanyLite = { id: string; name: string; domain: string | null }
 
@@ -29,6 +30,16 @@ export async function propagateLink(client: { query: (t: string, p?: unknown[]) 
   const domain = (email ?? '').toLowerCase().split('@')[1]
   if (domain && domain !== config.allowedDomain && !FREE_MAIL.has(domain)) {
     await client.query('UPDATE companies SET domain = $2 WHERE id = $1 AND domain IS NULL', [companyId, domain])
+  }
+  // Carry the contact's existing emails/meetings onto the company and its best deal.
+  await client.query('UPDATE activities SET company_id = $2 WHERE contact_id = $1 AND company_id IS NULL', [contactId, companyId])
+  const deal = await pickDeal([{ id: contactId, company_id: companyId, email: email ?? '' }])
+  if (deal) {
+    const moved = await query<{ id: string }>('UPDATE activities SET deal_id = $2 WHERE contact_id = $1 AND deal_id IS NULL RETURNING id', [contactId, deal.id], client as never)
+    if (moved.length) {
+      await client.query('UPDATE deals SET last_activity_at = GREATEST(COALESCE(last_activity_at, to_timestamp(0)), (SELECT MAX(created_at) FROM activities WHERE deal_id = $1)) WHERE id = $1', [deal.id])
+      await audit(client as never, { entityType: 'deal', entityId: deal.id, action: 'update', actorId, changes: { activities_attached: moved.length, contact_id: contactId }, summary: `${moved.length} synced item(s) attached from a newly linked contact` })
+    }
   }
   const n = (await one<{ n: number }>('SELECT COUNT(*)::int AS n FROM contacts WHERE company_id = $1 AND archived_at IS NULL', [companyId], client as never))!.n
   if (n !== 1) return 0

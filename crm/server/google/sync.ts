@@ -17,7 +17,7 @@ export interface SyncStats { seen: number; logged: number; updated: number }
 
 // ---------- matching ----------
 
-async function matchContacts(parties: EmailParty[]): Promise<MatchedContact[]> {
+export async function matchContacts(parties: EmailParty[]): Promise<MatchedContact[]> {
   if (!parties.length) return []
   return query<MatchedContact>(
     `SELECT id, company_id, lower(email) AS email FROM contacts WHERE archived_at IS NULL AND lower(email) = ANY($1::text[])`,
@@ -86,6 +86,61 @@ async function touchDeal(dealId: string | null, at: string): Promise<void> {
   await query('UPDATE deals SET last_activity_at = GREATEST(COALESCE(last_activity_at, $2), $2) WHERE id = $1', [dealId, at])
 }
 
+// ---------- re-evaluating earlier unmatched items ----------
+
+interface UnmatchedRow { id: number; source: 'gmail' | 'gcal'; external_id: string; addresses: EmailParty[] }
+
+/**
+ * Items we could not match earlier may match now (a contact was created or linked, a company
+ * learned its domain). Fetch exactly those items again and log them. Runs at the start of each sync.
+ */
+export async function reprocessUnmatched(conn: ConnectionRow, api: GoogleFetcher, source: 'gmail' | 'gcal'): Promise<{ logged: number; dismissed: number }> {
+  const rows = await query<UnmatchedRow>(`SELECT id, source, external_id, addresses FROM sync_unmatched WHERE user_id = $1 AND source = $2 AND dismissed_at IS NULL ORDER BY occurred_at DESC LIMIT 500`, [conn.user_id, source])
+  let logged = 0
+  let dismissed = 0
+  for (const row of rows) {
+    const addresses = await dropIgnored(row.addresses)
+    if (!addresses.length) {
+      await query('UPDATE sync_unmatched SET dismissed_at = now() WHERE id = $1', [row.id])
+      dismissed++
+      continue
+    }
+    let contacts = await matchContacts(addresses)
+    if (!contacts.length) contacts = await autoCreateByDomain(addresses, conn.user_id)
+    if (!contacts.length) continue
+    try {
+      if (source === 'gmail') {
+        const q = row.external_id.startsWith('gmail:') ? null : `rfc822msgid:${row.external_id}`
+        const id = q
+          ? (await api.get<{ messages?: Array<{ id: string }> }>(`${GMAIL}/messages`, { q, maxResults: 1 })).messages?.[0]?.id
+          : row.external_id.slice('gmail:'.length)
+        if (!id) continue
+        const m = await api.get<GmailMessage>(`${GMAIL}/messages/${id}`, { format: 'metadata', metadataHeaders: ['From', 'To', 'Cc', 'Subject', 'Date', 'Message-ID'] })
+        const parsed = parseGmailMessage(m, conn.google_email, config.allowedDomain)
+        const r = await logEmail(conn.user_id, parsed)
+        if (r === 'logged') {
+          logged++
+          await query(`UPDATE activities SET meta = meta || jsonb_build_object('gmail_id', $2::text) WHERE source = 'gmail' AND external_id = $1`, [parsed.message_id, id])
+        }
+        if (r !== 'unmatched') await query('DELETE FROM sync_unmatched WHERE id = $1', [row.id])
+      } else {
+        const page = await api.get<{ items?: CalendarEvent[] }>(CAL, { iCalUID: row.external_id, singleEvents: 'true', maxResults: 5 })
+        const raw = page.items?.[0]
+        if (!raw) {
+          await query('DELETE FROM sync_unmatched WHERE id = $1', [row.id])
+          continue
+        }
+        const r = await logEvent(conn.user_id, parseCalendarEvent(raw, config.allowedDomain))
+        if (r === 'logged' || r === 'updated') logged++
+        if (r !== 'unmatched') await query('DELETE FROM sync_unmatched WHERE id = $1', [row.id])
+      }
+    } catch (e) {
+      console.warn('reprocess failed for', row.source, row.external_id, (e as Error).message)
+    }
+  }
+  return { logged, dismissed }
+}
+
 // ---------- runs ----------
 
 async function startRun(userId: string, kind: 'gmail' | 'calendar', trigger: Trigger): Promise<number> {
@@ -142,6 +197,8 @@ export async function syncGmail(conn: ConnectionRow, api: GoogleFetcher, trigger
   const runId = await startRun(conn.user_id, 'gmail', trigger)
   const stats: SyncStats = { seen: 0, logged: 0, updated: 0 }
   try {
+    const re = await reprocessUnmatched(conn, api, 'gmail')
+    stats.logged += re.logged
     // Overlap the previous watermark by a day: Gmail's `after:` is day-granular and
     // messages can arrive out of order. Dedup makes the overlap harmless.
     const since = conn.gmail_synced_through
@@ -255,6 +312,8 @@ export async function syncCalendar(conn: ConnectionRow, api: GoogleFetcher, trig
     return { events, nextSyncToken }
   }
   try {
+    const re = await reprocessUnmatched(conn, api, 'gcal')
+    stats.logged += re.logged
     let result
     try {
       result = await fetchAll(conn.calendar_sync_token)
