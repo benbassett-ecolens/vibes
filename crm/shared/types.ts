@@ -229,6 +229,7 @@ export interface GoogleStatus {
   connection: GoogleConnection | null
   runs: SyncRun[]
   unmatched_count: number
+  totals?: { emails: number; meetings: number }
 }
 
 export interface AuditEntry {

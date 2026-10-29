@@ -4,9 +4,29 @@ import { query } from './db.js'
 import { slackCall, slackConfigured, slackSafe } from './slack/client.js'
 import { createDueRenewals } from './routes/deals.js'
 import { pickDeal } from './google/sync.js'
+import { FREE_MAIL } from '../shared/match.js'
 
 export async function runMaintenance(): Promise<{ audit_purged: number; unmatched_purged: number; nudged: number; renewals_created: number }> {
   const renewalsCreated = await createDueRenewals()
+  // Companies learn their email domain from their contacts: the most common non-free-mail domain,
+  // provided it is not shared with another company's contacts.
+  await query(`
+    WITH d AS (
+      SELECT c.company_id, split_part(lower(c.email), '@', 2) AS domain, COUNT(*) AS n
+      FROM contacts c JOIN companies co ON co.id = c.company_id
+      WHERE c.email LIKE '%@%' AND c.archived_at IS NULL AND co.domain IS NULL
+        AND split_part(lower(c.email), '@', 2) <> $1
+        AND split_part(lower(c.email), '@', 2) <> ALL($2::text[])
+      GROUP BY c.company_id, split_part(lower(c.email), '@', 2)
+    ), best AS (
+      SELECT DISTINCT ON (company_id) company_id, domain FROM d ORDER BY company_id, n DESC
+    ), unique_domains AS (
+      SELECT domain FROM d GROUP BY domain HAVING COUNT(DISTINCT company_id) = 1
+    )
+    UPDATE companies co SET domain = b.domain FROM best b JOIN unique_domains u ON u.domain = b.domain
+    WHERE co.id = b.company_id AND co.domain IS NULL`,
+    [config.allowedDomain, [...FREE_MAIL]],
+  )
   // Activities logged against a contact before it had a company (or whose company gained a deal since):
   // attach them to the company and its best deal. Idempotent; covers contacts linked before this logic existed.
   await query(`UPDATE activities a SET company_id = c.company_id FROM contacts c WHERE a.contact_id = c.id AND a.company_id IS NULL AND c.company_id IS NOT NULL`)

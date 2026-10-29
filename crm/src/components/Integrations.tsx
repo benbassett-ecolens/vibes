@@ -157,6 +157,7 @@ export function GoogleCard() {
               <dt>Calendar</dt><dd className="row"><label className="row"><input type="checkbox" checked={conn.calendar_sync_enabled} disabled={busy} onChange={(e) => run(() => api.patch('/api/google/connection', { calendar_sync_enabled: e.target.checked }))} /> on</label><span className="muted small">last synced {relative(conn.calendar_last_synced_at)}</span></dd>
               <dt>First-sync window</dt><dd>{conn.gmail_sync_window_days} days of mail</dd>
               <dt>Connected</dt><dd>{fmtDateTime(conn.created_at)}</dd>
+              <dt>Logged so far</dt><dd><strong>{s.totals?.emails ?? 0}</strong> emails and <strong>{s.totals?.meetings ?? 0}</strong> meetings across the team <span className="muted small">· each run below counts only what it added</span></dd>
             </dl>
             {conn.last_error && <div className="error-box" style={{ marginBottom: 12 }}>{conn.last_error}</div>}
             <div className="row wrap" style={{ marginBottom: 12 }}>
