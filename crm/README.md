@@ -143,6 +143,12 @@ Ecolens 30%, Proposal 50%, Contract Sent 80%, Closed Won, Closed Lost, Deferred 
 
 The sidebar has Light / Auto / Dark. Auto follows the operating system. The choice is per browser.
 
+## Start fresh
+
+Settings → **Start fresh** (admins) deletes every deal, company, contact and activity plus the
+unmatched-sender list, rewinds the Google sync, and keeps users, pipelines, stages, products, lost
+reasons, ignored domains, connections and the audit log. Type `RESET` to enable the button.
+
 ## Retention
 
 `AUDIT_RETENTION_MONTHS` (default 12) purges `audit_log` rows older than that on each scheduled
@@ -246,16 +252,14 @@ A second service with its own database on the same Cloud SQL instance, scaled to
 
 ```bash
 cd ~/vibes && git fetch origin && git checkout <branch> && cd crm
-SERVICE=ecolens-crm-staging DB_NAME=crm_staging APP_ENV=staging DOMAIN= \
-  APP_BASE_URL=<the staging run.app URL after the first deploy> \
+SERVICE=ecolens-crm-staging DB_NAME=crm_staging APP_ENV=staging DOMAIN= WITH_SLACK=0 \
   PROJECT_ID=ecolens-crm REGION=us-central1 GOOGLE_CLIENT_ID=... ADMIN_EMAILS=... ./deploy/setup-gcp.sh
 ```
 
-The first run prints the staging service URL; add it to the OAuth client's JavaScript origins (and
-`<url>/api/google/callback` to redirect URIs if you want Gmail sync there), then re-run with
-`APP_BASE_URL` set to it. The app shows a yellow STAGING banner. Secrets (session, sync, Google,
-Slack) are shared with production; a separate Slack app is needed if Slack buttons should work in
-staging, otherwise leave the Slack secrets unset for it.
+With no `DOMAIN`, the script uses the service's own run.app URL as the base URL automatically and
+prints it. Add that URL to the OAuth client's JavaScript origins (and `<url>/api/google/callback`
+to its redirect URIs if you want Gmail sync in staging). The app shows a yellow STAGING banner.
+`WITH_SLACK=0` keeps Slack off staging so test tasks never message real people.
 
 ### 3. Continuous deploys (optional)
 

@@ -17,7 +17,10 @@ DB_USER="${DB_USER:-crm}"
 DOMAIN="${DOMAIN:-crm.ecolens.io}"
 # Public origin the app uses for OAuth callbacks and Slack links. Defaults to the custom domain;
 # set it to the run.app URL while DNS is not live yet, then re-run without it.
-APP_BASE_URL="${APP_BASE_URL:-https://$DOMAIN}"
+APP_BASE_URL="${APP_BASE_URL:-}"
+[ -z "$APP_BASE_URL" ] && [ -n "$DOMAIN" ] && APP_BASE_URL="https://$DOMAIN"
+# WITH_SLACK=0 leaves the Slack secrets off this service (use for staging so test tasks never DM real people).
+WITH_SLACK="${WITH_SLACK:-1}"
 # "production" or "staging": shown as a banner in the app when not production.
 APP_ENV="${APP_ENV:-production}"
 # Cloud Scheduler job name follows the service so staging and production do not collide.
@@ -90,6 +93,7 @@ for s in crm-db-password crm-session-secret crm-sync-secret; do
 done
 for pair in "crm-google-client-secret:GOOGLE_CLIENT_SECRET" "crm-slack-bot-token:SLACK_BOT_TOKEN" "crm-slack-signing-secret:SLACK_SIGNING_SECRET"; do
   name="${pair%%:*}"; var="${pair##*:}"
+  case "$var" in SLACK_*) [ "$WITH_SLACK" = "1" ] || continue;; esac
   if gcloud secrets describe "$name" >/dev/null 2>&1; then
     gcloud secrets add-iam-policy-binding "$name" --member="serviceAccount:$RUN_SA" --role=roles/secretmanager.secretAccessor >/dev/null
     SECRET_BINDINGS="$SECRET_BINDINGS,$var=$name:latest"
@@ -108,9 +112,15 @@ echo "▶ Deploying Cloud Run service: $SERVICE"
 gcloud run deploy "$SERVICE" --image="$IMAGE" --region="$REGION" --platform=managed \
   --allow-unauthenticated \
   --add-cloudsql-instances="$CONNECTION_NAME" \
-  --set-env-vars="NODE_ENV=production,CLOUD_SQL_CONNECTION_NAME=${CONNECTION_NAME},DB_USER=${DB_USER},DB_NAME=${DB_NAME},ALLOWED_DOMAIN=${ALLOWED_DOMAIN},ADMIN_EMAILS=${ADMIN_EMAILS},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},APP_BASE_URL=${APP_BASE_URL},APP_ENV=${APP_ENV},AUDIT_RETENTION_MONTHS=${AUDIT_RETENTION_MONTHS}" \
+  --set-env-vars="NODE_ENV=production,CLOUD_SQL_CONNECTION_NAME=${CONNECTION_NAME},DB_USER=${DB_USER},DB_NAME=${DB_NAME},ALLOWED_DOMAIN=${ALLOWED_DOMAIN},ADMIN_EMAILS=${ADMIN_EMAILS},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},APP_BASE_URL=${APP_BASE_URL:-pending},APP_ENV=${APP_ENV},AUDIT_RETENTION_MONTHS=${AUDIT_RETENTION_MONTHS}" \
   --set-secrets="$SECRET_BINDINGS" \
   --min-instances=0 --max-instances=3 --memory=512Mi --cpu=1 --port=8080 --timeout=900
+
+# No custom domain and no explicit base URL: use the service's own run.app URL.
+if [ -z "$APP_BASE_URL" ]; then
+  APP_BASE_URL="$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
+  gcloud run services update "$SERVICE" --region="$REGION" --update-env-vars="APP_BASE_URL=${APP_BASE_URL}" --quiet >/dev/null
+fi
 
 # The app enforces @ecolens.io sign-in itself, so the service must be reachable without a Google IAM check.
 # Organizations created recently enforce "domain restricted sharing", which blocks allUsers; detect and explain.

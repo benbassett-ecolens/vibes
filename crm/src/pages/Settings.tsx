@@ -191,6 +191,44 @@ function VersionLine() {
   return <div className="small muted" style={{ textAlign: 'right' }}>Build {v.data?.version ?? '…'}</div>
 }
 
+function DangerZone() {
+  const toast = useToast()
+  const { refresh } = useRefData()
+  const preview = useQuery(() => api.get<Record<string, number>>('/api/admin/reset/preview'), [])
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const p = preview.data
+  return (
+    <div className="card" style={{ borderColor: 'var(--danger-border, #f0c3c3)' }}>
+      <div className="card-h"><h2 style={{ color: 'var(--danger)' }}>Start fresh</h2><span className="muted small right">admins only · cannot be undone</span></div>
+      <div className="card-b">
+        <p className="small" style={{ marginBottom: 8 }}>
+          Removes <strong>every deal, company, contact and activity</strong> (including synced emails and meetings) and the unmatched-sender list, and rewinds the Gmail/Calendar sync so it re-reads the last 30 days against the clean slate.
+          Keeps users, pipelines, stages, products, lost reasons, ignored domains, Google and Slack connections, and the audit log.
+        </p>
+        {p && <p className="small muted" style={{ marginBottom: 10 }}>Currently: {p.deals} deals · {p.companies} companies · {p.contacts} contacts · {p.activities} activities · {p.unmatched} unmatched senders</p>}
+        <div className="row wrap">
+          <input className="input sm" placeholder='Type RESET to enable' value={text} onChange={(e) => setText(e.target.value)} style={{ width: 200 }} />
+          <button className="btn danger sm" disabled={text !== 'RESET' || busy} onClick={async () => {
+            setBusy(true)
+            try {
+              const r = await api.post<{ removed: Record<string, number> }>('/api/admin/reset', { confirm: 'RESET' })
+              toast(`Removed ${r.removed.deals} deals, ${r.removed.companies} companies, ${r.removed.contacts} contacts, ${r.removed.activities} activities`)
+              setText('')
+              await refresh()
+              await preview.refresh()
+            } catch (e) {
+              toast((e as Error).message, 'error')
+            } finally {
+              setBusy(false)
+            }
+          }}>Delete all deals, companies, contacts and activities</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function SettingsPage() {
   const { user } = useAuth()
   const { pipelines, users, lostReasons, refresh } = useRefData()
@@ -274,6 +312,7 @@ export function SettingsPage() {
           </div>
         </div>
 
+        {isAdmin && <DangerZone />}
         <VersionLine />
         <div className="card pad">
           <h2 style={{ marginBottom: 6 }}>Data export</h2>
