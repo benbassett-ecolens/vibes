@@ -1,10 +1,11 @@
 # vibes
 
-Ecolens internal apps. Two projects live in this repo:
+Ecolens internal apps. Four projects live in this repo:
 
 - **Ecolens L10** — EOS Level 10 meeting hub (scorecard, rocks, headlines, issues, ratings). Docs directly below.
 - **Stock deal desk** — an agent swarm that screens equities and sizes positions. Docs in the second half of this file.
 - **Weekend business generator** — a scheduled Claude routine that posts three weekend-buildable business ideas to Slack each weekday morning. Docs in [`business_generator/README.md`](business_generator/README.md).
+- **Ecolens CRM** — a self-hosted CRM (kanban deals, stages, contacts, companies, tasks, audit trail, reports) that runs on Cloud Run + Cloud SQL behind an `@ecolens.io` Google sign-in gate. Docs in [`crm/README.md`](crm/README.md).
 
 ---
 # Ecolens L10 🎯
