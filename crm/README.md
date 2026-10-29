@@ -261,12 +261,35 @@ prints it. Add that URL to the OAuth client's JavaScript origins (and `<url>/api
 to its redirect URIs if you want Gmail sync in staging). The app shows a yellow STAGING banner.
 `WITH_SLACK=0` keeps Slack off staging so test tasks never message real people.
 
-### 3. Continuous deploys (optional)
+### 3. Continuous deploys
 
-Create a Cloud Build trigger on this repo (branch `main`, included files `crm/**`, config
-`crm/cloudbuild.yaml`) and set the `_SQL_INSTANCE` substitution to the instance connection name.
-Each push then builds and deploys. Environment variables and secrets set in step 2 persist across
-revisions.
+Once the services exist (step 2 ran once for production and once for staging), Cloud Build deploys
+on every push. One-time setup, in Cloud Shell:
+
+```bash
+PN=$(gcloud projects describe ecolens-crm --format='value(projectNumber)')
+SA="${PN}-compute@developer.gserviceaccount.com"
+for r in roles/run.admin roles/iam.serviceAccountUser roles/cloudsql.client roles/artifactregistry.writer roles/logging.logWriter roles/storage.objectViewer; do
+  gcloud projects add-iam-policy-binding ecolens-crm --member="serviceAccount:$SA" --role="$r" --condition=None >/dev/null
+done
+```
+
+Then in the console: Cloud Build → **Repositories** → **Connect repository** (GitHub, authorize,
+pick `benbassett-ecolens/vibes`). Then **Triggers** → **Create trigger**, twice:
+
+| | production | staging |
+| --- | --- | --- |
+| Name | `crm-production` | `crm-staging` |
+| Event | Push to a branch | Push to a branch |
+| Branch (regex) | `^main$` | `^staging$` |
+| Included files filter | `crm/**` | `crm/**` |
+| Configuration | Cloud Build configuration file, `crm/cloudbuild.yaml` | same |
+| Substitution `_SERVICE` | `ecolens-crm` | `ecolens-crm-staging` |
+| Substitution `_SQL_INSTANCE` | `ecolens-crm:us-central1:ecolens-crm-db` | same |
+
+Workflow from then on: branch from `main`, merge into `staging` to try it in the sandbox, merge into
+`main` to ship. Env vars and secrets on each service persist across revisions; change them with
+`deploy/setup-gcp.sh` or `gcloud run services update`.
 
 ### Runtime configuration
 
