@@ -6,7 +6,7 @@ import { HttpError } from '../http.js'
 
 export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
 export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
-export const SCOPES = ['openid', 'email', GMAIL_SCOPE, CALENDAR_SCOPE]
+export const SCOPES = ['openid', 'email', GMAIL_SCOPE, ...(config.calendarSyncEnabled ? [CALENDAR_SCOPE] : [])]
 
 export function syncConfigured(): boolean {
   return !!(config.googleClientId && config.googleClientSecret && config.appBaseUrl)

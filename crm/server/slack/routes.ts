@@ -20,8 +20,12 @@ slackWebhookRouter.use(express.urlencoded({ extended: false, verify: keepRaw as 
 slackWebhookRouter.use(express.json({ verify: keepRaw as never }))
 
 function guard(req: RawReq): void {
-  if (!slackConfigured()) throw forbidden('Slack is not configured')
+  if (!slackConfigured()) {
+    console.warn('slack webhook: rejected, SLACK_BOT_TOKEN/SLACK_SIGNING_SECRET not configured')
+    throw forbidden('Slack is not configured')
+  }
   if (!verifySlackSignature(req.rawBody ?? '', req.headers['x-slack-request-timestamp'] as string | undefined, req.headers['x-slack-signature'] as string | undefined)) {
+    console.warn(`slack webhook: bad signature on ${req.path} (timestamp ${req.headers['x-slack-request-timestamp'] ?? 'missing'}, body ${(req.rawBody ?? '').length} bytes)`)
     throw forbidden('Bad Slack signature')
   }
 }
@@ -66,6 +70,7 @@ slackWebhookRouter.post(
   wrap(async (req, res) => {
     guard(req as RawReq)
     const body = req.body as { user_id: string; text?: string; command?: string }
+    console.log(`slack command ${body.command ?? ''} from ${body.user_id}: ${(body.text ?? '').slice(0, 80)}`)
     const actor = await crmUserForSlack(body.user_id)
     if (!actor) {
       res.json({ response_type: 'ephemeral', text: `I couldn't match your Slack account to a CRM user. Sign in to the CRM once with your @${config.allowedDomain} account first.` })

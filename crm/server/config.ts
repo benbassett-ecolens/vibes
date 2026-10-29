@@ -32,6 +32,8 @@ export const config = {
   syncSecret: env.SYNC_SECRET ?? '',
   // Optional in-process sync timer (minutes). 0 = off; use Cloud Scheduler instead.
   syncIntervalMinutes: int('SYNC_INTERVAL_MINUTES', 0),
+  // Google Calendar sync is off unless CALENDAR_SYNC=on (meetings were more noise than signal).
+  calendarSyncEnabled: env.CALENDAR_SYNC === 'on',
   // Slack two-way task sync.
   slackBotToken: env.SLACK_BOT_TOKEN ?? '',
   slackSigningSecret: env.SLACK_SIGNING_SECRET ?? '',

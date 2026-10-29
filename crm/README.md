@@ -54,7 +54,7 @@ threads (all `@ecolens.io`) are ignored.
 - **Gmail**: every run lists messages since the last watermark (minus a day of overlap) excluding
   spam, trash, promotions, social and updates; one activity per RFC `Message-ID`, so two reps on
   the same thread produce one record. Direction (sent/received) comes from the From header.
-- **Calendar**: initial window is 30 days back / 90 days ahead, then incremental via the API's
+- **Calendar** (off by default; set `CALENDAR_SYNC=on` to enable): initial window is 30 days back / 90 days ahead, then incremental via the API's
   `syncToken`; cancelled events remove the meeting, time changes update it, past meetings are
   marked completed. Dedup key is `iCalUID`.
 - **Matching**: external addresses → `contacts.email`; the activity attaches to the newest open

@@ -107,7 +107,7 @@ async function status(userId: string): Promise<GoogleStatus> {
   const runs = await query<SyncRun>('SELECT * FROM sync_runs WHERE user_id = $1 ORDER BY started_at DESC LIMIT 12', [userId])
   const unmatched = (await one<{ n: number }>('SELECT COUNT(*)::int AS n FROM sync_unmatched WHERE user_id = $1 AND dismissed_at IS NULL', [userId]))!.n
   const totals = (await one<{ emails: number; meetings: number }>(`SELECT COUNT(*) FILTER (WHERE source = 'gmail')::int AS emails, COUNT(*) FILTER (WHERE source = 'gcal')::int AS meetings FROM activities`))!
-  return { configured: syncConfigured(), connection: conn, runs, unmatched_count: unmatched, totals }
+  return { configured: syncConfigured(), connection: conn, runs, unmatched_count: unmatched, totals, calendar_feature: config.calendarSyncEnabled }
 }
 
 googleRouter.get(

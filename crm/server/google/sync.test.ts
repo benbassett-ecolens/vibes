@@ -65,6 +65,7 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
   beforeAll(async () => {
     await runMigrations()
     config.allowedDomain = 'ecolens.io'
+    config.calendarSyncEnabled = true // the calendar paths stay covered even though the default is off
     userId = (await one<{ id: string }>(`INSERT INTO users (email, name) VALUES ($1, 'Rep') RETURNING id`, [`rep-${uniq}@ecolens.io`]))!.id
     const companyId = (await one<{ id: string }>(`INSERT INTO companies (name, domain) VALUES ($1, $2) RETURNING id`, [`Customer ${uniq}`, `customer-${uniq}.test`]))!.id
     contactId = (await one<{ id: string }>(`INSERT INTO contacts (first_name, email, company_id) VALUES ('Ann', $1, $2) RETURNING id`, [`ann-${uniq}@customer.test`, companyId]))!.id

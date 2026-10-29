@@ -365,7 +365,7 @@ export async function syncUser(userId: string, trigger: Trigger, apiOverride?: G
         out.errors.push(`Gmail: ${(e as Error).message}`)
       }
     }
-    if (conn.calendar_sync_enabled) {
+    if (conn.calendar_sync_enabled && config.calendarSyncEnabled) {
       try {
         out.calendar = await syncCalendar(conn, api, trigger)
       } catch (e) {

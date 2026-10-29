@@ -230,6 +230,7 @@ export interface GoogleStatus {
   runs: SyncRun[]
   unmatched_count: number
   totals?: { emails: number; meetings: number }
+  calendar_feature?: boolean
 }
 
 export interface AuditEntry {

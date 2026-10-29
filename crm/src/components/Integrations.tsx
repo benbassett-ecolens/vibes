@@ -137,15 +137,15 @@ export function GoogleCard() {
   return (
     <div className="card">
       <div className="card-h">
-        <h2>Gmail &amp; Calendar sync</h2>
-        <span className="muted small right">emails and meetings with known contacts are logged automatically</span>
+        <h2>Gmail sync</h2>
+        <span className="muted small right">emails with known contacts are logged automatically</span>
       </div>
       <div className="card-b">
         {!s && <div className="muted">Loading…</div>}
         {s && !s.configured && <div className="error-box">Not configured on the server. Set GOOGLE_CLIENT_SECRET and APP_BASE_URL (see README).</div>}
         {s && s.configured && !conn && (
           <div className="row wrap">
-            <p className="grow small muted">Connect your own Google account. We read message headers and snippets (never bodies or attachments) and calendar invites, and only keep the ones that involve a contact in this CRM.</p>
+            <p className="grow small muted">Connect your own Google account. We read message headers and snippets (never bodies or attachments), and only keep the ones that involve a contact in this CRM.</p>
             <a className="btn primary" href="/api/google/connect">Connect Google</a>
           </div>
         )}
@@ -154,10 +154,10 @@ export function GoogleCard() {
             <dl className="kv" style={{ marginBottom: 12 }}>
               <dt>Account</dt><dd>{conn.google_email} {conn.last_error && <span className="badge danger" title={conn.last_error}>last run failed</span>}</dd>
               <dt>Gmail</dt><dd className="row"><label className="row"><input type="checkbox" checked={conn.gmail_sync_enabled} disabled={busy} onChange={(e) => run(() => api.patch('/api/google/connection', { gmail_sync_enabled: e.target.checked }))} /> on</label><span className="muted small">last synced {relative(conn.gmail_last_synced_at)}</span></dd>
-              <dt>Calendar</dt><dd className="row"><label className="row"><input type="checkbox" checked={conn.calendar_sync_enabled} disabled={busy} onChange={(e) => run(() => api.patch('/api/google/connection', { calendar_sync_enabled: e.target.checked }))} /> on</label><span className="muted small">last synced {relative(conn.calendar_last_synced_at)}</span></dd>
+              {s.calendar_feature && <><dt>Calendar</dt><dd className="row"><label className="row"><input type="checkbox" checked={conn.calendar_sync_enabled} disabled={busy} onChange={(e) => run(() => api.patch('/api/google/connection', { calendar_sync_enabled: e.target.checked }))} /> on</label><span className="muted small">last synced {relative(conn.calendar_last_synced_at)}</span></dd></>}
               <dt>First-sync window</dt><dd>{conn.gmail_sync_window_days} days of mail</dd>
               <dt>Connected</dt><dd>{fmtDateTime(conn.created_at)}</dd>
-              <dt>Logged so far</dt><dd><strong>{s.totals?.emails ?? 0}</strong> emails and <strong>{s.totals?.meetings ?? 0}</strong> meetings across the team <span className="muted small">· each run below counts only what it added</span></dd>
+              <dt>Logged so far</dt><dd><strong>{s.totals?.emails ?? 0}</strong> emails{s.calendar_feature ? <> and <strong>{s.totals?.meetings ?? 0}</strong> meetings</> : null} across the team <span className="muted small">· each run below counts only what it added</span></dd>
             </dl>
             {conn.last_error && <div className="error-box" style={{ marginBottom: 12 }}>{conn.last_error}</div>}
             <div className="row wrap" style={{ marginBottom: 12 }}>
