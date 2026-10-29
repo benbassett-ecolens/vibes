@@ -58,8 +58,11 @@ threads (all `@ecolens.io`) are ignored.
   `syncToken`; cancelled events remove the meeting, time changes update it, past meetings are
   marked completed. Dedup key is `iCalUID`.
 - **Matching**: external addresses → `contacts.email`; the activity attaches to the newest open
-  deal naming that contact (else one at their company). Unmatched senders are kept in a list in
-  Settings with a "Create contact" button that back-fills the item.
+  deal naming that contact (else one at their company). If no contact matches but the sender's
+  domain belongs to a company (`companies.domain`), a contact is created automatically and the
+  item is logged. Everything else is kept as an unmatched sender, grouped by domain in Settings,
+  with "Create contact" (which also teaches the company its domain) and "Ignore domain"
+  (team-wide; common vendor/system domains are pre-ignored).
 - **Scheduling**: Cloud Scheduler calls `POST /api/internal/sync` every 10 minutes with
   `Authorization: Bearer $SYNC_SECRET` (set up by `deploy/setup-gcp.sh`). The same endpoint runs
   retention maintenance. Locally, set `SYNC_INTERVAL_MINUTES=10` for an in-process timer.

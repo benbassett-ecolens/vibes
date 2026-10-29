@@ -158,6 +158,39 @@ googleRouter.get(
   }),
 )
 
+/** Ignore a sender domain team-wide and dismiss every pending item that only involves ignored domains. */
+googleRouter.post(
+  '/ignore-domain',
+  wrap(async (req, res) => {
+    const { domain } = parse(z.object({ domain: z.string().trim().toLowerCase().regex(/^[a-z0-9.-]+\.[a-z]{2,}$/) }), req.body)
+    if (domain === config.allowedDomain) throw badRequest('That is your own domain')
+    await query('INSERT INTO sync_ignored_domains (domain, created_by) VALUES ($1, $2) ON CONFLICT DO NOTHING', [domain, req.user.id])
+    const dismissed = await query<{ id: number }>(
+      `UPDATE sync_unmatched u SET dismissed_at = now() WHERE dismissed_at IS NULL AND NOT EXISTS (
+         SELECT 1 FROM jsonb_array_elements(u.addresses) a
+         WHERE split_part(a->>'email', '@', 2) NOT IN (SELECT domain FROM sync_ignored_domains)
+       ) RETURNING id`,
+    )
+    await audit(pool, { entityType: 'user', entityId: req.user.id, action: 'update', actorId: req.user.id, changes: { ignored_domain: domain, dismissed: dismissed.length }, summary: `Ignored sender domain ${domain}` })
+    res.json({ ok: true, dismissed: dismissed.length })
+  }),
+)
+
+googleRouter.get(
+  '/ignored-domains',
+  wrap(async (_req, res) => {
+    res.json({ items: await query<{ domain: string; created_at: string }>('SELECT domain, created_at FROM sync_ignored_domains ORDER BY domain') })
+  }),
+)
+
+googleRouter.delete(
+  '/ignored-domains/:domain',
+  wrap(async (req, res) => {
+    await query('DELETE FROM sync_ignored_domains WHERE domain = $1', [String(req.params.domain).toLowerCase()])
+    res.json({ ok: true })
+  }),
+)
+
 googleRouter.post(
   '/unmatched/:id/dismiss',
   wrap(async (req, res) => {
@@ -180,6 +213,11 @@ googleRouter.post(
         [body.first_name, body.last_name, body.email.toLowerCase(), body.company_id ?? null, req.user.id],
       ))!
       await audit(pool, { entityType: 'contact', entityId: contact.id, action: 'create', actorId: req.user.id, changes: { email: body.email, from: 'synced email' }, summary: `Created contact ${body.first_name} ${body.last_name} from a synced ${item.source === 'gmail' ? 'email' : 'meeting'}`.trim() })
+    }
+    // Teach the company its email domain so future senders there attach automatically.
+    const domain = body.email.toLowerCase().split('@')[1]
+    if (body.company_id && domain && domain !== config.allowedDomain) {
+      await query('UPDATE companies SET domain = $2 WHERE id = $1 AND domain IS NULL', [body.company_id, domain])
     }
     // Log the item now that it matches; forget the unmatched record so the next sync picks the rest.
     await query('DELETE FROM sync_unmatched WHERE user_id = $1 AND source = $2 AND addresses @> $3::jsonb', [req.user.id, item.source, JSON.stringify([{ email: body.email.toLowerCase() }])])

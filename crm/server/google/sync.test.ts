@@ -31,6 +31,8 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
       gmailMsg('m1', `Ann <ann-${uniq}@customer.test>`, 'rep@ecolens.io', 'Re: Proposal', `m1-${uniq}@x`, now - 3600e3),
       gmailMsg('m2', `stranger-${uniq}@elsewhere.test`, 'rep@ecolens.io', 'Cold inbound', `m2-${uniq}@x`, now - 7200e3),
       gmailMsg('m3', 'colleague@ecolens.io', 'rep@ecolens.io', 'Internal only', `m3-${uniq}@x`, now - 60e3),
+      gmailMsg('m4', `New Person <new.person@customer-${uniq}.test>`, 'rep@ecolens.io', 'Domain match', `m4-${uniq}@x`, now - 1800e3),
+      gmailMsg('m5', 'promo@linkedin.com', 'rep@ecolens.io', 'Ignored vendor', `m5-${uniq}@x`, now - 900e3),
     ],
     events: [
       { id: 'ev1', iCalUID: `ev1-${uniq}@google.com`, status: 'confirmed', summary: 'Kickoff', start: { dateTime: new Date(now + 86400e3).toISOString() }, end: { dateTime: new Date(now + 90000e3).toISOString() }, attendees: [{ email: 'rep@ecolens.io', self: true }, { email: `ann-${uniq}@customer.test` }], htmlLink: 'https://cal/ev1' },
@@ -53,7 +55,7 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
     await runMigrations()
     config.allowedDomain = 'ecolens.io'
     userId = (await one<{ id: string }>(`INSERT INTO users (email, name) VALUES ($1, 'Rep') RETURNING id`, [`rep-${uniq}@ecolens.io`]))!.id
-    const companyId = (await one<{ id: string }>(`INSERT INTO companies (name) VALUES ($1) RETURNING id`, [`Customer ${uniq}`]))!.id
+    const companyId = (await one<{ id: string }>(`INSERT INTO companies (name, domain) VALUES ($1, $2) RETURNING id`, [`Customer ${uniq}`, `customer-${uniq}.test`]))!.id
     contactId = (await one<{ id: string }>(`INSERT INTO contacts (first_name, email, company_id) VALUES ('Ann', $1, $2) RETURNING id`, [`ann-${uniq}@customer.test`, companyId]))!.id
     const stage = (await one<{ id: string; pipeline_id: string }>(`SELECT id, pipeline_id FROM stages WHERE kind = 'open' ORDER BY position LIMIT 1`))!
     dealId = (await one<{ id: string }>(`INSERT INTO deals (title, pipeline_id, stage_id, company_id, contact_id, owner_id, stage_entered_at) VALUES ('Deal', $1, $2, $3, $4, $5, now() - interval '20 days') RETURNING id`, [stage.pipeline_id, stage.id, companyId, contactId, userId]))!.id
@@ -65,6 +67,7 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
     await query('DELETE FROM users WHERE id = $1', [userId]) // cascades connection, runs, unmatched
     await query(`DELETE FROM activities WHERE external_id LIKE $1 OR external_id LIKE $2`, [`%${uniq}%`, `%${uniq}%`])
     await query(`DELETE FROM contacts WHERE email LIKE $1`, [`%${uniq}%`])
+    await query(`DELETE FROM activities WHERE subject = 'Domain match' AND created_at > now() - interval '10 minutes'`)
     await query(`DELETE FROM companies WHERE name LIKE $1`, [`%${uniq}%`])
     await pool.end()
   })
@@ -72,7 +75,7 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
   it('logs matched emails on the deal, records unmatched senders, skips internal mail', async () => {
     const r = await syncUser(userId, 'manual', fake)
     expect(r.errors).toEqual([])
-    expect(r.gmail).toMatchObject({ logged: 1 })
+    expect(r.gmail).toMatchObject({ logged: 2 })
     const act = await one<{ deal_id: string; contact_id: string; completed_at: string | null; meta: { direction: string } }>(`SELECT * FROM activities WHERE source = 'gmail' AND external_id = $1`, [`m1-${uniq}@x`])
     expect(act?.deal_id).toBe(dealId)
     expect(act?.contact_id).toBe(contactId)
@@ -81,6 +84,15 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
     const unmatched = await query<{ subject: string }>(`SELECT subject FROM sync_unmatched WHERE user_id = $1`, [userId])
     expect(unmatched.map((u) => u.subject)).toEqual(['Cold inbound'])
     expect(await one(`SELECT 1 FROM activities WHERE external_id = $1`, [`m3-${uniq}@x`])).toBeNull()
+    // Domain match: a sender at the company's domain becomes a contact and the email lands on the deal.
+    const auto = await one<{ id: string; first_name: string; company_id: string }>(`SELECT id, first_name, company_id FROM contacts WHERE lower(email) = $1`, [`new.person@customer-${uniq}.test`])
+    expect(auto?.first_name).toBe('New')
+    const m4 = await one<{ deal_id: string; contact_id: string }>(`SELECT deal_id, contact_id FROM activities WHERE external_id = $1`, [`m4-${uniq}@x`])
+    expect(m4?.deal_id).toBe(dealId)
+    expect(m4?.contact_id).toBe(auto?.id)
+    // Ignored vendor domain: neither logged nor listed as unmatched.
+    expect(await one(`SELECT 1 FROM activities WHERE external_id = $1`, [`m5-${uniq}@x`])).toBeNull()
+    expect(await one(`SELECT 1 FROM sync_unmatched WHERE external_id = $1`, [`m5-${uniq}@x`])).toBeNull()
     // Rotting timer reset by the customer email.
     const deal = await one<{ last_activity_at: string }>('SELECT last_activity_at FROM deals WHERE id = $1', [dealId])
     expect(new Date(deal!.last_activity_at).getTime()).toBeGreaterThan(now - 3700e3)
@@ -94,7 +106,7 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
     const past = await one<{ completed_at: string | null }>(`SELECT * FROM activities WHERE source = 'gcal' AND external_id = $1`, [`ev2-${uniq}@google.com`])
     expect(past?.completed_at).not.toBeNull()
     const runs = await query<{ kind: string; status: string; items_logged: number }>('SELECT kind, status, items_logged FROM sync_runs WHERE user_id = $1 ORDER BY id', [userId])
-    expect(runs).toEqual([{ kind: 'gmail', status: 'ok', items_logged: 1 }, { kind: 'calendar', status: 'ok', items_logged: 2 }])
+    expect(runs).toEqual([{ kind: 'gmail', status: 'ok', items_logged: 2 }, { kind: 'calendar', status: 'ok', items_logged: 2 }])
   })
 
   it('is idempotent and uses the calendar sync token; cancellations remove the meeting', async () => {

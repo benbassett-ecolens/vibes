@@ -25,6 +25,40 @@ async function matchContacts(parties: EmailParty[]): Promise<MatchedContact[]> {
   )
 }
 
+const domainOf = (email: string) => email.split('@')[1] ?? ''
+
+/** Drop addresses whose domain the team has chosen to ignore (vendors, newsletters, system senders). */
+export async function dropIgnored(parties: EmailParty[]): Promise<EmailParty[]> {
+  if (!parties.length) return []
+  const ignored = new Set((await query<{ domain: string }>('SELECT domain FROM sync_ignored_domains WHERE domain = ANY($1::text[])', [[...new Set(parties.map((p) => domainOf(p.email)))]])).map((r) => r.domain))
+  return parties.filter((p) => !ignored.has(domainOf(p.email)))
+}
+
+/**
+ * Senders at a domain that belongs to a known company become contacts automatically
+ * (HubSpot-style domain association). Returns the contacts created.
+ */
+export async function autoCreateByDomain(parties: EmailParty[], userId: string): Promise<MatchedContact[]> {
+  if (!parties.length) return []
+  const companies = await query<{ id: string; domain: string }>('SELECT id, lower(domain) AS domain FROM companies WHERE archived_at IS NULL AND lower(domain) = ANY($1::text[])', [[...new Set(parties.map((p) => domainOf(p.email)))]])
+  if (!companies.length) return []
+  const out: MatchedContact[] = []
+  for (const p of parties) {
+    const company = companies.find((c) => c.domain === domainOf(p.email))
+    if (!company) continue
+    const [first, ...rest] = (p.name ?? p.email.split('@')[0].replace(/[._-]+/g, ' ')).split(/\s+/)
+    const c = await one<{ id: string }>(
+      `INSERT INTO contacts (first_name, last_name, email, company_id, owner_id, created_by) VALUES ($1, $2, $3, $4, $5, $5)
+       ON CONFLICT DO NOTHING RETURNING id`,
+      [first || p.email, rest.join(' '), p.email, company.id, userId],
+    )
+    if (!c) continue
+    await withTransaction((client) => audit(client, { entityType: 'contact', entityId: c.id, action: 'create', actorId: userId, changes: { email: p.email, company_id: company.id, via: 'domain match' }, summary: `Contact created automatically from ${p.email} (company domain match)` }))
+    out.push({ id: c.id, company_id: company.id, email: p.email })
+  }
+  return out
+}
+
 /** Best deal for a set of contacts: open deal naming one of them, else an open deal at their company; newest first. */
 export async function pickDeal(contacts: MatchedContact[]): Promise<{ id: string; company_id: string | null } | null> {
   if (!contacts.length) return null
@@ -71,9 +105,12 @@ async function finishRun(id: number, stats: SyncStats, error?: string): Promise<
 const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me'
 
 export async function logEmail(userId: string, email: ParsedEmail): Promise<'logged' | 'skipped' | 'unmatched'> {
-  const contacts = await matchContacts(email.external)
+  const external = await dropIgnored(email.external)
+  if (!external.length) return 'skipped'
+  let contacts = await matchContacts(external)
+  if (!contacts.length) contacts = await autoCreateByDomain(external, userId)
   if (!contacts.length) {
-    await recordUnmatched(userId, 'gmail', email.message_id, email.date, email.subject, email.external, `https://mail.google.com/mail/#all/${email.thread_id}`)
+    await recordUnmatched(userId, 'gmail', email.message_id, email.date, email.subject, external, `https://mail.google.com/mail/#all/${email.thread_id}`)
     return 'unmatched'
   }
   // Prefer the contact on the From line (for received mail), else the first match.
@@ -170,9 +207,12 @@ export async function logEvent(userId: string, ev: ParsedEvent): Promise<'logged
     return 'removed'
   }
   if (!ev.starts_at) return 'skipped'
-  const contacts = await matchContacts(ev.external)
+  const external = await dropIgnored(ev.external)
+  if (!external.length && !existing) return 'skipped'
+  let contacts = await matchContacts(external)
+  if (!contacts.length && !existing) contacts = await autoCreateByDomain(external, userId)
   if (!contacts.length && !existing) {
-    await recordUnmatched(userId, 'gcal', ev.uid, ev.starts_at, ev.subject, ev.external, ev.url)
+    await recordUnmatched(userId, 'gcal', ev.uid, ev.starts_at, ev.subject, external, ev.url)
     return 'unmatched'
   }
   const primary = contacts[0]

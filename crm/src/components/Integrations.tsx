@@ -26,6 +26,14 @@ function CreateContactFromItem({ item, onClose, onDone }: { item: UnmatchedItem;
   const [lastName, setLastName] = useState(guessName.split(/\s+/).slice(1).join(' '))
   const [companyId, setCompanyId] = useState<string | null>(null)
   const [companyName, setCompanyName] = useState<string | null>(null)
+  // Suggest the company whose name contains the domain's label (rockton.com -> "Rockton Software").
+  useEffect(() => {
+    const label = (first?.email.split('@')[1] ?? '').split('.').slice(0, -1).join(' ').replace(/[-_]/g, ' ')
+    if (label.length < 3) return
+    api.get<{ items: Array<{ id: string; name: string }> }>(`/api/companies?q=${encodeURIComponent(label)}&limit=1`).then((r) => {
+      if (r.items[0] && !companyId) { setCompanyId(r.items[0].id); setCompanyName(r.items[0].name) }
+    }).catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
@@ -41,7 +49,7 @@ function CreateContactFromItem({ item, onClose, onDone }: { item: UnmatchedItem;
       <form onSubmit={submit}>
         <div className="form-grid">
           <Field label="Email" span2>
-            <select className="select" value={email} onChange={(e) => setEmail(e.target.value)}>
+            <select className="select" value={email} onChange={(e) => { setEmail(e.target.value); const a = item.addresses.find((x) => x.email === e.target.value); const n = (a?.name ?? e.target.value.split('@')[0]).split(/\s+/); setFirstName(n[0] ?? ''); setLastName(n.slice(1).join(' ')) }}>
               {item.addresses.map((a) => <option key={a.email} value={a.email}>{a.name ? `${a.name} <${a.email}>` : a.email}</option>)}
             </select>
           </Field>
@@ -53,6 +61,20 @@ function CreateContactFromItem({ item, onClose, onDone }: { item: UnmatchedItem;
       </form>
     </Modal>
   )
+}
+
+function groupByDomain(items: UnmatchedItem[]): Array<{ domain: string; items: UnmatchedItem[]; people: UnmatchedItem['addresses'] }> {
+  const groups = new Map<string, { domain: string; items: UnmatchedItem[]; people: UnmatchedItem['addresses'] }>()
+  for (const it of items) {
+    for (const a of it.addresses) {
+      const domain = a.email.split('@')[1] ?? 'unknown'
+      const g = groups.get(domain) ?? { domain, items: [], people: [] }
+      if (!g.items.includes(it)) g.items.push(it)
+      if (!g.people.some((p) => p.email === a.email)) g.people.push(a)
+      groups.set(domain, g)
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.items.length - a.items.length)
 }
 
 export function GoogleCard() {
@@ -137,22 +159,24 @@ export function GoogleCard() {
             {showUnmatched && (
               <div className="table-wrap" style={{ marginBottom: 12 }}>
                 <table className="table">
-                  <thead><tr><th>When</th><th>Subject</th><th>External addresses</th><th /></tr></thead>
+                  <thead><tr><th>Sender domain</th><th className="num">Items</th><th>People seen</th><th>Latest</th><th /></tr></thead>
                   <tbody>
-                    {(unmatched.data?.items ?? []).map((u) => (
-                      <tr key={u.id}>
-                        <td className="muted small">{u.source === 'gmail' ? '✉️' : '📅'} {relative(u.occurred_at)}</td>
-                        <td>{u.external_url ? <a href={u.external_url} target="_blank" rel="noreferrer">{u.subject}</a> : u.subject}</td>
-                        <td className="small">{u.addresses.map((a) => a.email).join(', ')}</td>
+                    {groupByDomain(unmatched.data?.items ?? []).map((g) => (
+                      <tr key={g.domain}>
+                        <td><strong>{g.domain}</strong></td>
+                        <td className="num">{g.items.length}</td>
+                        <td className="small">{g.people.slice(0, 3).map((p) => p.name ?? p.email).join(', ')}{g.people.length > 3 ? ` +${g.people.length - 3}` : ''}</td>
+                        <td className="small">{g.items[0].external_url ? <a href={g.items[0].external_url} target="_blank" rel="noreferrer">{g.items[0].subject}</a> : g.items[0].subject} <span className="muted">· {relative(g.items[0].occurred_at)}</span></td>
                         <td className="row">
-                          <button className="btn sm" onClick={() => setCreating(u)}>Create contact</button>
-                          <button className="btn ghost sm" onClick={() => run(() => api.post(`/api/google/unmatched/${u.id}/dismiss`))}>Ignore</button>
+                          <button className="btn sm primary" onClick={() => setCreating({ ...g.items[0], addresses: g.people })}>Create contact</button>
+                          <button className="btn ghost sm" title="Never log mail from this domain; dismisses these items" onClick={() => run(() => api.post<{ dismissed: number }>('/api/google/ignore-domain', { domain: g.domain }).then((r) => toast(`Ignored ${g.domain} (${r.dismissed} items)`)))}>Ignore domain</button>
                         </td>
                       </tr>
                     ))}
-                    {!unmatched.data?.items.length && <tr><td colSpan={4} className="empty">Nothing unmatched. Every synced item found a contact.</td></tr>}
+                    {!unmatched.data?.items.length && <tr><td colSpan={5} className="empty">Nothing unmatched. Every synced item found a contact.</td></tr>}
                   </tbody>
                 </table>
+                <div className="small muted" style={{ padding: '8px 12px' }}>Creating a contact with a company teaches the company its email domain; later senders from that domain become contacts and get logged automatically. Ignored domains apply to the whole team.</div>
               </div>
             )}
             <table className="table">
