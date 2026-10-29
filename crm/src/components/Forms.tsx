@@ -156,7 +156,16 @@ export function ContactForm({ initial, onClose, onSaved, defaults }: { initial?:
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [suggestion, setSuggestion] = useState<{ company_id: string; company_name: string; score: number } | null>(null)
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }))
+  const suggestCompany = () => {
+    if (!form.email.includes('@')) return
+    api.get<{ items: Array<{ company_id: string; company_name: string; score: number }> }>(`/api/contacts/suggest-company?email=${encodeURIComponent(form.email)}`).then((r) => {
+      const best = r.items[0] ?? null
+      setSuggestion(best)
+      if (best && best.score >= 0.85 && !form.company_id) set({ company_id: best.company_id, company_name: best.company_name })
+    }).catch(() => {})
+  }
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true)
@@ -178,10 +187,15 @@ export function ContactForm({ initial, onClose, onSaved, defaults }: { initial?:
         <div className="form-grid">
           <Field label="First name"><input className="input" required autoFocus value={form.first_name} onChange={(e) => set({ first_name: e.target.value })} /></Field>
           <Field label="Last name"><input className="input" value={form.last_name} onChange={(e) => set({ last_name: e.target.value })} /></Field>
-          <Field label="Email"><input className="input" type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} /></Field>
+          <Field label="Email">
+            <input className="input" type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} onBlur={suggestCompany} />
+          </Field>
           <Field label="Phone"><input className="input" value={form.phone} onChange={(e) => set({ phone: e.target.value })} /></Field>
           <Field label="Job title"><input className="input" value={form.title} onChange={(e) => set({ title: e.target.value })} /></Field>
-          <Field label="Company"><CompanyPicker value={form.company_id} label={form.company_name} onChange={(id, c) => set({ company_id: id, company_name: c?.name ?? null })} /></Field>
+          <Field label="Company">
+            <CompanyPicker value={form.company_id} label={form.company_name} onChange={(id, c) => set({ company_id: id, company_name: c?.name ?? null })} />
+            {suggestion && !form.company_id && <span className="small muted">Suggested from the email domain: <a href="#" onClick={(e) => { e.preventDefault(); set({ company_id: suggestion.company_id, company_name: suggestion.company_name }) }}>{suggestion.company_name}</a> ({Math.round(suggestion.score * 100)}%)</span>}
+          </Field>
           <Field label="Owner"><OwnerSelect value={form.owner_id} onChange={(id) => set({ owner_id: id })} /></Field>
           <Field label="Notes" span2><textarea className="textarea" value={form.notes} onChange={(e) => set({ notes: e.target.value })} /></Field>
         </div>

@@ -4,6 +4,7 @@ import { audit, diff } from '../audit.js'
 import { one, query, withTransaction } from '../db.js'
 import { notFound, parse, parsePaging, parseSort, wrap } from '../http.js'
 import type { Contact } from '../../shared/types.js'
+import { autoCompanyForEmail, propagateLink, suggestCompaniesForEmail } from './linker.js'
 
 export const contactsRouter = Router()
 
@@ -64,6 +65,20 @@ contactsRouter.get(
   }),
 )
 
+/** Company suggestions for an email address (used by the contact form as you type). */
+contactsRouter.get(
+  '/suggest-company',
+  wrap(async (req, res) => {
+    const email = typeof req.query.email === 'string' ? req.query.email : ''
+    if (!email.includes('@')) {
+      res.json({ items: [] })
+      return
+    }
+    const s = await suggestCompaniesForEmail(email)
+    res.json({ items: s.map((x) => ({ company_id: x.company.id, company_name: x.company.name, score: x.score, reason: x.reason })) })
+  }),
+)
+
 contactsRouter.get(
   '/:id',
   wrap(async (req, res) => {
@@ -77,14 +92,16 @@ contactsRouter.post(
   '/',
   wrap(async (req, res) => {
     const body = parse(contactSchema, req.body)
+    const companyId = body.company_id ?? (await autoCompanyForEmail(body.email))
     const created = await withTransaction(async (client) => {
       const c = (await one<Contact>(
         `INSERT INTO contacts (first_name, last_name, email, phone, title, notes, company_id, owner_id, created_by)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-        [body.first_name, body.last_name ?? '', body.email ?? null, body.phone ?? null, body.title ?? null, body.notes ?? null, body.company_id ?? null, body.owner_id ?? req.user.id, req.user.id],
+        [body.first_name, body.last_name ?? '', body.email ?? null, body.phone ?? null, body.title ?? null, body.notes ?? null, companyId, body.owner_id ?? req.user.id, req.user.id],
         client,
       ))!
-      await audit(client, { entityType: 'contact', entityId: c.id, action: 'create', actorId: req.user.id, changes: { ...body }, summary: `Created contact ${c.first_name} ${c.last_name}`.trim() })
+      await audit(client, { entityType: 'contact', entityId: c.id, action: 'create', actorId: req.user.id, changes: { ...body, ...(companyId && !body.company_id ? { company_id: companyId, company_via: 'email domain' } : {}) }, summary: `Created contact ${c.first_name} ${c.last_name}`.trim() })
+      if (companyId) await propagateLink(client, c.id, companyId, c.email, req.user.id)
       return c
     })
     res.status(201).json(await one<Contact>(`${LIST_SELECT} WHERE ct.id = $1`, [created.id]))
@@ -109,6 +126,7 @@ contactsRouter.patch(
       if (Object.keys(changes).length) {
         await audit(client, { entityType: 'contact', entityId: after.id, action: 'update', actorId: req.user.id, changes, summary: `Updated ${Object.keys(changes).join(', ')}` })
       }
+      if (after.company_id && after.company_id !== before.company_id) await propagateLink(client, after.id, after.company_id, after.email, req.user.id)
     })
     res.json(await one<Contact>(`${LIST_SELECT} WHERE ct.id = $1`, [before.id]))
   }),

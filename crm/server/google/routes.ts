@@ -8,6 +8,7 @@ import { badRequest, forbidden, notFound, parse, wrap, HttpError } from '../http
 import { requireAuth, SESSION_COOKIE, verifySession } from '../auth.js'
 import { CALENDAR_SCOPE, GMAIL_SCOPE, SCOPES, loadConnection, oauthClient, revokeAndDelete, saveConnection, syncConfigured, pool } from './client.js'
 import { syncAll, syncUser } from './sync.js'
+import { autoCompanyForEmail, propagateLink } from '../routes/linker.js'
 import { runMaintenance } from '../maintenance.js'
 import type { GoogleConnection, GoogleStatus, SyncRun, UnmatchedItem } from '../../shared/types.js'
 
@@ -214,10 +215,11 @@ googleRouter.post(
       ))!
       await audit(pool, { entityType: 'contact', entityId: contact.id, action: 'create', actorId: req.user.id, changes: { email: body.email, from: 'synced email' }, summary: `Created contact ${body.first_name} ${body.last_name} from a synced ${item.source === 'gmail' ? 'email' : 'meeting'}`.trim() })
     }
-    // Teach the company its email domain so future senders there attach automatically.
-    const domain = body.email.toLowerCase().split('@')[1]
-    if (body.company_id && domain && domain !== config.allowedDomain) {
-      await query('UPDATE companies SET domain = $2 WHERE id = $1 AND domain IS NULL', [body.company_id, domain])
+    // Teach the company its email domain so future senders there attach automatically, and fill empty main-contact slots.
+    const companyId = body.company_id ?? (await autoCompanyForEmail(body.email))
+    if (companyId) {
+      await query('UPDATE contacts SET company_id = COALESCE(company_id, $2) WHERE id = $1', [contact.id, companyId])
+      await propagateLink(pool, contact.id, companyId, body.email, req.user.id)
     }
     // Log the item now that it matches; forget the unmatched record so the next sync picks the rest.
     await query('DELETE FROM sync_unmatched WHERE user_id = $1 AND source = $2 AND addresses @> $3::jsonb', [req.user.id, item.source, JSON.stringify([{ email: body.email.toLowerCase() }])])

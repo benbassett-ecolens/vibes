@@ -23,6 +23,7 @@ import { runMaintenance } from './maintenance.js'
 import { slackRouter, slackWebhookRouter } from './slack/routes.js'
 import { productsRouter } from './routes/products.js'
 import { importRouter } from './routes/importer.js'
+import { linkerRouter } from './routes/linker.js'
 
 export function createApp(): express.Express {
   const app = express()
@@ -57,6 +58,7 @@ export function createApp(): express.Express {
   app.use('/api/deals', dealsRouter)
   app.use('/api/products', productsRouter)
   app.use('/api/import', importRouter)
+  app.use('/api/link', linkerRouter)
   app.use('/api/activities', activitiesRouter)
   app.use('/api/audit', auditRouter)
   app.use('/api/reports', reportsRouter)
