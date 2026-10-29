@@ -167,6 +167,14 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .mono { font-variant-numeric: tabular-nums; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ---- Combobox (search pickers) ---- */
+.combo { position: relative; }
+.combo-list { list-style: none; margin: 4px 0 0; padding: 4px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow); max-height: 232px; overflow-y: auto; }
+.combo-list li { padding: 7px 10px; border-radius: 4px; cursor: pointer; line-height: 1.3; min-height: 32px; }
+.combo-list li.active { background: var(--brand-soft); color: var(--brand-2); }
+.combo-list li.selected { font-weight: 600; }
+.combo-list li.empty-row { cursor: default; }
+
 /* ---- Toolbar / filters ---- */
 .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .toolbar .input, .toolbar .select { width: auto; }

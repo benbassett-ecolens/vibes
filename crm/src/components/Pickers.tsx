@@ -4,7 +4,12 @@ import { useDebounced } from '../hooks'
 import { useRefData } from '../refdata'
 import type { Company, Contact } from '../../shared/types'
 
-/** Searchable picker backed by the list endpoints. Shows the current label even if it isn't in the result set. */
+/**
+ * Searchable combobox backed by the list endpoints. Always an input: focus it and start typing
+ * to narrow the list; arrow keys + Enter select; Escape closes. Results render inline (not in
+ * an absolutely positioned popup) so they are never clipped by a modal, and the list is tall
+ * enough to show at least six names before scrolling.
+ */
 function SearchPicker<T extends { id: string }>({
   value,
   label,
@@ -24,39 +29,96 @@ function SearchPicker<T extends { id: string }>({
 }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
-  const dq = useDebounced(q)
+  const dq = useDebounced(q, 150)
   const [items, setItems] = useState<T[]>([])
+  const [active, setActive] = useState(0)
+  const [loading, setLoading] = useState(false)
   useEffect(() => {
     if (!open) return
     let alive = true
-    fetchItems(dq).then((r) => alive && setItems(r)).catch(() => {})
+    setLoading(true)
+    fetchItems(dq)
+      .then((r) => {
+        if (!alive) return
+        setItems(r)
+        setActive(0)
+      })
+      .catch(() => {})
+      .finally(() => alive && setLoading(false))
     return () => {
       alive = false
     }
   }, [open, dq, fetchItems])
-  if (!open) {
-    return (
-      <button type="button" className="input" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setOpen(true)}>
-        {value ? label ?? '…' : <span className="muted">{placeholder}</span>}
-      </button>
-    )
+
+  const options: Array<{ id: string | null; text: string; item: T | null }> = [
+    ...(allowNone && !q ? [{ id: null, text: 'None', item: null }] : []),
+    ...items.map((it) => ({ id: it.id, text: itemLabel(it), item: it })),
+  ]
+  const pick = (o: { id: string | null; item: T | null }) => {
+    onChange(o.id, o.item)
+    setOpen(false)
+    setQ('')
+  }
+  const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open && (e.key === 'ArrowDown' || e.key === 'Enter')) {
+      setOpen(true)
+      return
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActive((a) => Math.min(options.length - 1, a + 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActive((a) => Math.max(0, a - 1))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (options[active]) pick(options[active])
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+      setQ('')
+    }
   }
   return (
-    <div style={{ position: 'relative' }}>
-      <input className="input" autoFocus placeholder="Type to search…" value={q} onChange={(e) => setQ(e.target.value)} onBlur={() => setTimeout(() => setOpen(false), 150)} />
-      <div className="card" style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, top: '100%', marginTop: 4, maxHeight: 240, overflow: 'auto' }}>
-        {allowNone && (
-          <button type="button" className="btn ghost" style={{ display: 'block', width: '100%', textAlign: 'left', borderRadius: 0 }} onMouseDown={() => onChange(null, null)}>
-            <span className="muted">None</span>
-          </button>
-        )}
-        {items.map((it) => (
-          <button key={it.id} type="button" className="btn ghost" style={{ display: 'block', width: '100%', textAlign: 'left', borderRadius: 0 }} onMouseDown={() => onChange(it.id, it)}>
-            {itemLabel(it)}
-          </button>
-        ))}
-        {items.length === 0 && <div className="empty small">No matches</div>}
-      </div>
+    <div className="combo">
+      <input
+        className="input"
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+        placeholder={value && label ? label : placeholder}
+        value={open ? q : value ? label ?? '' : ''}
+        onFocus={() => {
+          setOpen(true)
+          setQ('')
+        }}
+        onClick={() => setOpen(true)}
+        onChange={(e) => {
+          setQ(e.target.value)
+          if (!open) setOpen(true)
+        }}
+        onKeyDown={onKey}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && (
+        <ul className="combo-list" role="listbox">
+          {options.map((o, i) => (
+            <li
+              key={o.id ?? '__none'}
+              role="option"
+              aria-selected={o.id === value}
+              className={`${i === active ? 'active' : ''} ${o.id === value ? 'selected' : ''} ${o.id === null ? 'muted' : ''}`}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                pick(o)
+              }}
+              onMouseEnter={() => setActive(i)}
+            >
+              {o.text}
+            </li>
+          ))}
+          {!options.length && <li className="muted empty-row">{loading ? 'Searching…' : 'No matches'}</li>}
+        </ul>
+      )}
     </div>
   )
 }
