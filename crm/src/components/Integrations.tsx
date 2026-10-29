@@ -77,6 +77,13 @@ function groupByDomain(items: UnmatchedItem[]): Array<{ domain: string; items: U
   return [...groups.values()].sort((a, b) => b.items.length - a.items.length)
 }
 
+interface Diag {
+  connection: { gmail_synced_through: string | null; gmail_last_synced_at: string | null; calendar_last_synced_at: string | null; last_error: string | null } | null
+  counts: Record<string, number>
+  matchable_pending: Array<{ external_id: string; subject: string; email: string }>
+  recent_contacts: Array<{ email: string; company: string | null; activities: number; created_at: string }>
+}
+
 export function GoogleCard() {
   const toast = useToast()
   const [params, setParams] = useSearchParams()
@@ -84,6 +91,8 @@ export function GoogleCard() {
   const unmatched = useQuery(() => api.get<{ items: UnmatchedItem[] }>('/api/google/unmatched'), [])
   const [busy, setBusy] = useState(false)
   const [showUnmatched, setShowUnmatched] = useState(false)
+  const [showDiag, setShowDiag] = useState(false)
+  const diag = useQuery(() => (showDiag ? api.get<Diag>('/api/google/diagnostics') : Promise.resolve(null)), [showDiag, status.data?.runs.length])
   const [creating, setCreating] = useState<UnmatchedItem | null>(null)
   const flash = params.get('google')
   useEffect(() => {
@@ -151,7 +160,8 @@ export function GoogleCard() {
             </dl>
             {conn.last_error && <div className="error-box" style={{ marginBottom: 12 }}>{conn.last_error}</div>}
             <div className="row wrap" style={{ marginBottom: 12 }}>
-              <button className="btn primary sm" disabled={busy} onClick={() => run(() => api.post('/api/google/sync'), 'Sync finished')}>{busy ? 'Syncing…' : 'Sync now'}</button>
+              <button className="btn primary sm" disabled={busy} onClick={() => run(() => api.post<{ errors: string[]; gmail?: { logged: number }; calendar?: { logged: number } }>('/api/google/sync').then((r) => { if (r.errors.length) throw new Error(r.errors.join(' · ')); toast(`Sync finished: ${r.gmail?.logged ?? 0} emails, ${r.calendar?.logged ?? 0} meetings logged`) }))}>{busy ? 'Syncing…' : 'Sync now'}</button>
+              <button className="btn sm" onClick={() => setShowDiag((v) => !v)}>Diagnostics</button>
               <button className="btn sm" onClick={() => setShowUnmatched((v) => !v)}>{s.unmatched_count} unmatched sender{s.unmatched_count === 1 ? '' : 's'}</button>
               <a className="btn sm" href="/api/google/connect">Reconnect</a>
               <button className="btn danger sm right" disabled={busy} onClick={() => run(() => api.delete('/api/google/connection'), 'Disconnected')}>Disconnect</button>
@@ -179,6 +189,21 @@ export function GoogleCard() {
                 <div className="small muted" style={{ padding: '8px 12px' }}>Creating a contact with a company teaches the company its email domain; later senders from that domain become contacts and get logged automatically. Ignored domains apply to the whole team.</div>
               </div>
             )}
+            {showDiag && diag.data && (
+              <div className="card pad" style={{ marginBottom: 12, background: 'var(--surface-2)' }}>
+                <div className="row wrap small" style={{ gap: 12 }}>
+                  {Object.entries(diag.data.counts).map(([k, v]) => <span key={k} className="badge">{k.replace(/_/g, ' ')}: <strong>{v}</strong></span>)}
+                </div>
+                {diag.data.connection?.last_error && <div className="error-box small" style={{ marginTop: 8 }}>{diag.data.connection.last_error}</div>}
+                <div className="small" style={{ marginTop: 8 }}>
+                  <strong>Pending items that now match a contact</strong> (should log on the next sync): {diag.data.matchable_pending.length ? diag.data.matchable_pending.map((m) => `${m.subject} ← ${m.email}`).join(' · ') : 'none'}
+                </div>
+                <table className="table" style={{ marginTop: 8 }}>
+                  <thead><tr><th>Recent contact</th><th>Company</th><th className="num">Synced items</th></tr></thead>
+                  <tbody>{diag.data.recent_contacts.map((c) => <tr key={c.email}><td className="small">{c.email}</td><td className="small">{c.company ?? <span className="muted">—</span>}</td><td className="num">{c.activities}</td></tr>)}</tbody>
+                </table>
+              </div>
+            )}
             <table className="table">
               <thead><tr><th>Run</th><th>Kind</th><th>Started</th><th className="num">Seen</th><th className="num">Logged</th><th className="num">Updated</th><th>Status</th></tr></thead>
               <tbody>
@@ -195,7 +220,7 @@ export function GoogleCard() {
           </>
         )}
       </div>
-      {creating && <CreateContactFromItem item={creating} onClose={() => setCreating(null)} onDone={() => { setCreating(null); run(async () => {}) }} />}
+      {creating && <CreateContactFromItem item={creating} onClose={() => setCreating(null)} onDone={() => { setCreating(null); run(() => api.post<{ errors: string[]; gmail?: { logged: number }; calendar?: { logged: number } }>('/api/google/sync').then((r) => { if (r.errors.length) throw new Error(r.errors.join(' · ')); toast(`Re-checked: ${r.gmail?.logged ?? 0} emails, ${r.calendar?.logged ?? 0} meetings logged`) })) }} />}
     </div>
   )
 }

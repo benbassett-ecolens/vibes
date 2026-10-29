@@ -345,11 +345,14 @@ export async function syncCalendar(conn: ConnectionRow, api: GoogleFetcher, trig
 
 // ---------- orchestration ----------
 
-const inFlight = new Set<string>()
+// One sync per user at a time. Entries expire so a frozen instance can never wedge a user forever.
+const inFlight = new Map<string, number>()
+const IN_FLIGHT_TTL_MS = 15 * 60 * 1000
 
 export async function syncUser(userId: string, trigger: Trigger, apiOverride?: GoogleFetcher): Promise<{ gmail?: SyncStats; calendar?: SyncStats; errors: string[] }> {
-  if (inFlight.has(userId)) return { errors: ['A sync is already running for this user'] }
-  inFlight.add(userId)
+  const startedAt = inFlight.get(userId)
+  if (startedAt && Date.now() - startedAt < IN_FLIGHT_TTL_MS) return { errors: [`A sync started ${Math.round((Date.now() - startedAt) / 60000)} min ago is still running; try again shortly`] }
+  inFlight.set(userId, Date.now())
   try {
     const conn = await loadConnection(userId)
     if (!conn) return { errors: ['Google account is not connected'] }

@@ -151,6 +151,42 @@ googleRouter.delete(
   }),
 )
 
+/** Admin diagnostics: what the sync can see, to explain "logged 0" without database access. */
+googleRouter.get(
+  '/diagnostics',
+  wrap(async (req, res) => {
+    const conn = await loadConnection(req.user.id)
+    const counts = (await one<Record<string, number>>(
+      `SELECT
+         (SELECT COUNT(*)::int FROM contacts WHERE archived_at IS NULL) AS contacts,
+         (SELECT COUNT(*)::int FROM contacts WHERE archived_at IS NULL AND email IS NOT NULL) AS contacts_with_email,
+         (SELECT COUNT(*)::int FROM contacts WHERE archived_at IS NULL AND company_id IS NOT NULL) AS contacts_with_company,
+         (SELECT COUNT(*)::int FROM companies WHERE archived_at IS NULL AND domain IS NOT NULL) AS companies_with_domain,
+         (SELECT COUNT(*)::int FROM activities WHERE source = 'gmail') AS gmail_activities,
+         (SELECT COUNT(*)::int FROM activities WHERE source = 'gcal') AS calendar_activities,
+         (SELECT COUNT(*)::int FROM activities WHERE source <> 'manual' AND deal_id IS NULL) AS synced_without_deal,
+         (SELECT COUNT(*)::int FROM sync_unmatched WHERE user_id = $1 AND dismissed_at IS NULL) AS unmatched_pending,
+         (SELECT COUNT(*)::int FROM sync_unmatched WHERE user_id = $1 AND dismissed_at IS NOT NULL) AS unmatched_dismissed,
+         (SELECT COUNT(*)::int FROM sync_ignored_domains) AS ignored_domains`,
+      [req.user.id],
+    ))!
+    // Pending unmatched items whose addresses now match a contact: these should log on the next sync.
+    const matchable = await query<{ external_id: string; subject: string; email: string }>(
+      `SELECT u.external_id, u.subject, c.email FROM sync_unmatched u
+       JOIN LATERAL jsonb_array_elements(u.addresses) a ON true
+       JOIN contacts c ON lower(c.email) = lower(a->>'email') AND c.archived_at IS NULL
+       WHERE u.user_id = $1 AND u.dismissed_at IS NULL LIMIT 10`,
+      [req.user.id],
+    )
+    // Recently created contacts and whether any synced activity references them.
+    const recent = await query<{ email: string; company: string | null; activities: number; created_at: string }>(
+      `SELECT c.email, co.name AS company, (SELECT COUNT(*)::int FROM activities a WHERE a.contact_id = c.id AND a.source <> 'manual') AS activities, c.created_at
+       FROM contacts c LEFT JOIN companies co ON co.id = c.company_id WHERE c.email IS NOT NULL AND c.archived_at IS NULL ORDER BY c.created_at DESC LIMIT 15`,
+    )
+    res.json({ connection: conn ? { gmail_synced_through: conn.gmail_synced_through, gmail_last_synced_at: conn.gmail_last_synced_at, calendar_last_synced_at: conn.calendar_last_synced_at, last_error: conn.last_error } : null, counts, matchable_pending: matchable, recent_contacts: recent })
+  }),
+)
+
 googleRouter.get(
   '/unmatched',
   wrap(async (req, res) => {
@@ -221,8 +257,7 @@ googleRouter.post(
       await query('UPDATE contacts SET company_id = COALESCE(company_id, $2) WHERE id = $1', [contact.id, companyId])
       await propagateLink(pool, contact.id, companyId, body.email, req.user.id)
     }
-    // The next sync re-checks pending unmatched items against the new contact and logs them.
-    syncUser(req.user.id, 'manual').catch(() => {})
+    // The client follows up with POST /api/google/sync so the re-check runs inside a request (Cloud Run gives no CPU after the response).
     res.status(201).json({ contact_id: contact.id })
   }),
 )
