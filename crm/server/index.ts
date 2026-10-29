@@ -25,6 +25,21 @@ import { productsRouter } from './routes/products.js'
 import { importRouter } from './routes/importer.js'
 import { linkerRouter } from './routes/linker.js'
 
+import { readFileSync } from 'node:fs'
+
+/** Commit the running build came from (written by deploy/setup-gcp.sh); 'dev' locally. */
+export const APP_VERSION: string = (() => {
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  for (const p of [path.resolve(here, '..', '..', '..', 'VERSION'), path.resolve(here, '..', 'VERSION'), path.resolve(process.cwd(), 'VERSION')]) {
+    try {
+      return readFileSync(p, 'utf8').trim()
+    } catch {
+      /* next */
+    }
+  }
+  return 'dev'
+})()
+
 export function createApp(): express.Express {
   const app = express()
   app.set('trust proxy', true) // Cloud Run terminates TLS in front of us.
@@ -42,7 +57,7 @@ export function createApp(): express.Express {
     next()
   })
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true }))
+  app.get('/api/health', (_req, res) => res.json({ ok: true, version: APP_VERSION }))
   app.use('/api/auth', authRouter)
   app.use('/api/internal', internalRouter) // shared-secret, for Cloud Scheduler
   app.use('/api/google', googleRouter) // handles its own auth (OAuth callback has no session header)

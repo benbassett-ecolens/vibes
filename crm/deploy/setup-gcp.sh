@@ -91,7 +91,10 @@ done
 gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$RUN_SA" --role=roles/cloudsql.client --condition=None >/dev/null
 
 echo "▶ Building and pushing image"
-IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:$(git rev-parse --short HEAD 2>/dev/null || date +%s)"
+GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || date +%s)"
+echo "$GIT_SHA" > "$(dirname "$0")/../VERSION"
+echo "   building commit $GIT_SHA ($(git log -1 --format=%s 2>/dev/null))"
+IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:${GIT_SHA}"
 gcloud builds submit --tag "$IMAGE" "$(dirname "$0")/.."
 
 echo "▶ Deploying Cloud Run service: $SERVICE"

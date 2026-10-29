@@ -186,6 +186,11 @@ function ProductsCard({ isAdmin }: { isAdmin: boolean }) {
   )
 }
 
+function VersionLine() {
+  const v = useQuery(() => api.get<{ version: string }>('/api/health'), [])
+  return <div className="small muted" style={{ textAlign: 'right' }}>Build {v.data?.version ?? '…'}</div>
+}
+
 export function SettingsPage() {
   const { user } = useAuth()
   const { pipelines, users, lostReasons, refresh } = useRefData()
@@ -269,6 +274,7 @@ export function SettingsPage() {
           </div>
         </div>
 
+        <VersionLine />
         <div className="card pad">
           <h2 style={{ marginBottom: 6 }}>Data export</h2>
           <p className="muted small" style={{ marginBottom: 10 }}>Everything is exportable as CSV, including the full audit trail and stage history (for time-in-stage analysis in a spreadsheet).</p>
