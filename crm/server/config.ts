@@ -13,6 +13,8 @@ function int(name: string, fallback: number): number {
 export const config = {
   port: int('PORT', 8080),
   isProduction: env.NODE_ENV === 'production',
+  // Deployment label shown in the UI when it is not 'production' (e.g. 'staging').
+  appEnv: env.APP_ENV ?? (env.NODE_ENV === 'production' ? 'production' : 'development'),
   databaseUrl: env.DATABASE_URL ?? '',
   cloudSql: {
     connectionName: env.CLOUD_SQL_CONNECTION_NAME ?? '',

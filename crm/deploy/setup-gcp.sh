@@ -18,6 +18,10 @@ DOMAIN="${DOMAIN:-crm.ecolens.io}"
 # Public origin the app uses for OAuth callbacks and Slack links. Defaults to the custom domain;
 # set it to the run.app URL while DNS is not live yet, then re-run without it.
 APP_BASE_URL="${APP_BASE_URL:-https://$DOMAIN}"
+# "production" or "staging": shown as a banner in the app when not production.
+APP_ENV="${APP_ENV:-production}"
+# Cloud Scheduler job name follows the service so staging and production do not collide.
+SCHED_JOB="${SERVICE}-sync"
 ALLOWED_DOMAIN="${ALLOWED_DOMAIN:-ecolens.io}"
 ADMIN_EMAILS="${ADMIN_EMAILS:-ben@ecolens.io}"
 GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-}"      # create under APIs & Services > Credentials (see README)
@@ -104,7 +108,7 @@ echo "▶ Deploying Cloud Run service: $SERVICE"
 gcloud run deploy "$SERVICE" --image="$IMAGE" --region="$REGION" --platform=managed \
   --allow-unauthenticated \
   --add-cloudsql-instances="$CONNECTION_NAME" \
-  --set-env-vars="NODE_ENV=production,CLOUD_SQL_CONNECTION_NAME=${CONNECTION_NAME},DB_USER=${DB_USER},DB_NAME=${DB_NAME},ALLOWED_DOMAIN=${ALLOWED_DOMAIN},ADMIN_EMAILS=${ADMIN_EMAILS},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},APP_BASE_URL=${APP_BASE_URL},AUDIT_RETENTION_MONTHS=${AUDIT_RETENTION_MONTHS}" \
+  --set-env-vars="NODE_ENV=production,CLOUD_SQL_CONNECTION_NAME=${CONNECTION_NAME},DB_USER=${DB_USER},DB_NAME=${DB_NAME},ALLOWED_DOMAIN=${ALLOWED_DOMAIN},ADMIN_EMAILS=${ADMIN_EMAILS},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},APP_BASE_URL=${APP_BASE_URL},APP_ENV=${APP_ENV},AUDIT_RETENTION_MONTHS=${AUDIT_RETENTION_MONTHS}" \
   --set-secrets="$SECRET_BINDINGS" \
   --min-instances=0 --max-instances=3 --memory=512Mi --cpu=1 --port=8080 --timeout=900
 
@@ -137,12 +141,17 @@ echo "▶ Cloud Scheduler: Gmail/Calendar sync + maintenance every '$SYNC_SCHEDU
 gcloud services enable cloudscheduler.googleapis.com >/dev/null
 SERVICE_URL="$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
 SYNC_SECRET_VALUE="$(gcloud secrets versions access latest --secret=crm-sync-secret)"
-if gcloud scheduler jobs describe crm-sync --location="$REGION" >/dev/null 2>&1; then
-  gcloud scheduler jobs update http crm-sync --location="$REGION" --schedule="$SYNC_SCHEDULE" --uri="${SERVICE_URL}/api/internal/sync" --http-method=POST --update-headers="Authorization=Bearer ${SYNC_SECRET_VALUE}" >/dev/null
+if gcloud scheduler jobs describe "$SCHED_JOB" --location="$REGION" >/dev/null 2>&1; then
+  gcloud scheduler jobs update http "$SCHED_JOB" --location="$REGION" --schedule="$SYNC_SCHEDULE" --uri="${SERVICE_URL}/api/internal/sync" --http-method=POST --update-headers="Authorization=Bearer ${SYNC_SECRET_VALUE}" >/dev/null
 else
-  gcloud scheduler jobs create http crm-sync --location="$REGION" --schedule="$SYNC_SCHEDULE" --uri="${SERVICE_URL}/api/internal/sync" --http-method=POST --headers="Authorization=Bearer ${SYNC_SECRET_VALUE}" --attempt-deadline=600s >/dev/null
+  gcloud scheduler jobs create http "$SCHED_JOB" --location="$REGION" --schedule="$SYNC_SCHEDULE" --uri="${SERVICE_URL}/api/internal/sync" --http-method=POST --headers="Authorization=Bearer ${SYNC_SECRET_VALUE}" --attempt-deadline=600s >/dev/null
 fi
+# Keep the legacy job name from the first production deploy in sync too.
+if [ "$SCHED_JOB" != "crm-sync" ] && gcloud scheduler jobs describe crm-sync --location="$REGION" >/dev/null 2>&1; then :; fi
 
+if [ -z "$DOMAIN" ]; then
+  echo "▶ No DOMAIN set; skipping custom domain"
+else
 echo "▶ Custom domain: $DOMAIN"
 ROOT_DOMAIN="$(echo "$DOMAIN" | awk -F. '{print $(NF-1)"."$NF}')"
 if gcloud domains list-user-verified --format='value(id)' 2>/dev/null | grep -qx "$ROOT_DOMAIN"; then
@@ -160,6 +169,7 @@ else
    it will create the mapping and print the DNS record for $DOMAIN. The service works at the run.app URL meanwhile.
 
 MSG
+fi
 fi
 echo
 echo "Service URL: $(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"

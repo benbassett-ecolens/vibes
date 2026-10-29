@@ -57,7 +57,7 @@ export function createApp(): express.Express {
     next()
   })
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true, version: APP_VERSION }))
+  app.get('/api/health', (_req, res) => res.json({ ok: true, version: APP_VERSION, env: config.appEnv }))
   app.use('/api/auth', authRouter)
   app.use('/api/internal', internalRouter) // shared-secret, for Cloud Scheduler
   app.use('/api/google', googleRouter) // handles its own auth (OAuth callback has no session header)

@@ -3,7 +3,8 @@ import { AuthProvider, LoginPage, useAuth } from './auth'
 import { Avatar, ToastProvider } from './components/ui'
 import { RefProvider } from './refdata'
 import { useEffect } from 'react'
-import { useLocalStorage } from './hooks'
+import { useLocalStorage, useQuery } from './hooks'
+import { api } from './api'
 import { Dashboard } from './pages/Dashboard'
 import { DealsPage } from './pages/Deals'
 import { DealDetail } from './pages/DealDetail'
@@ -50,6 +51,12 @@ function ThemeToggle() {
   )
 }
 
+function EnvBanner() {
+  const h = useQuery(() => api.get<{ env: string; version: string }>('/api/health'), [])
+  if (!h.data || h.data.env === 'production') return null
+  return <div className="env-banner">{h.data.env.toUpperCase()} · build {h.data.version} · not real data</div>
+}
+
 function Shell() {
   const { user, loading, logout } = useAuth()
   useTheme()
@@ -80,6 +87,7 @@ function Shell() {
           </div>
         </aside>
         <div className="main">
+          <EnvBanner />
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/deals" element={<DealsPage />} />

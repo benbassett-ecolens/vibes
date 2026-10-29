@@ -239,6 +239,24 @@ record to add for `crm.ecolens.io`; Cloud Run issues the certificate once DNS re
 Expected cost at Ecolens scale: Cloud Run scale-to-zero is pennies; `db-f1-micro` is roughly
 $10/month. Bump `SQL_TIER` later if needed.
 
+### Staging sandbox
+
+A second service with its own database on the same Cloud SQL instance, scaled to zero when idle
+(effectively free). Deploy from any branch you want to try out:
+
+```bash
+cd ~/vibes && git fetch origin && git checkout <branch> && cd crm
+SERVICE=ecolens-crm-staging DB_NAME=crm_staging APP_ENV=staging DOMAIN= \
+  APP_BASE_URL=<the staging run.app URL after the first deploy> \
+  PROJECT_ID=ecolens-crm REGION=us-central1 GOOGLE_CLIENT_ID=... ADMIN_EMAILS=... ./deploy/setup-gcp.sh
+```
+
+The first run prints the staging service URL; add it to the OAuth client's JavaScript origins (and
+`<url>/api/google/callback` to redirect URIs if you want Gmail sync there), then re-run with
+`APP_BASE_URL` set to it. The app shows a yellow STAGING banner. Secrets (session, sync, Google,
+Slack) are shared with production; a separate Slack app is needed if Slack buttons should work in
+staging, otherwise leave the Slack secrets unset for it.
+
 ### 3. Continuous deploys (optional)
 
 Create a Cloud Build trigger on this repo (branch `main`, included files `crm/**`, config
