@@ -46,11 +46,14 @@ fi
 gcloud sql databases describe "$DB_NAME" --instance="$SQL_INSTANCE" >/dev/null 2>&1 || \
   gcloud sql databases create "$DB_NAME" --instance="$SQL_INSTANCE"
 
-DB_PASSWORD="$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-32)"
-if gcloud sql users list --instance="$SQL_INSTANCE" --format='value(name)' | grep -qx "$DB_USER"; then
-  gcloud sql users set-password "$DB_USER" --instance="$SQL_INSTANCE" --password="$DB_PASSWORD"
-else
+# The DB password is generated once and kept in Secret Manager; set ROTATE_DB_PASSWORD=1 to change it.
+DB_PASSWORD=""
+if ! gcloud sql users list --instance="$SQL_INSTANCE" --format='value(name)' | grep -qx "$DB_USER"; then
+  DB_PASSWORD="$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-32)"
   gcloud sql users create "$DB_USER" --instance="$SQL_INSTANCE" --password="$DB_PASSWORD"
+elif [ "${ROTATE_DB_PASSWORD:-0}" = "1" ] || ! gcloud secrets describe crm-db-password >/dev/null 2>&1; then
+  DB_PASSWORD="$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-32)"
+  gcloud sql users set-password "$DB_USER" --instance="$SQL_INSTANCE" --password="$DB_PASSWORD"
 fi
 CONNECTION_NAME="$(gcloud sql instances describe "$SQL_INSTANCE" --format='value(connectionName)')"
 
@@ -62,7 +65,7 @@ upsert_secret() { # name value
     printf '%s' "$2" | gcloud secrets create "$1" --data-file=- --replication-policy=automatic >/dev/null
   fi
 }
-upsert_secret crm-db-password "$DB_PASSWORD"
+[ -n "$DB_PASSWORD" ] && upsert_secret crm-db-password "$DB_PASSWORD"
 gcloud secrets describe crm-session-secret >/dev/null 2>&1 || upsert_secret crm-session-secret "$(openssl rand -hex 48)"
 if [ "${ROTATE_SYNC_SECRET:-0}" = "1" ] || ! gcloud secrets describe crm-sync-secret >/dev/null 2>&1; then
   upsert_secret crm-sync-secret "$(openssl rand -hex 32)"
