@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { config } from '../config.js'
+import { HttpError } from '../http.js'
 import { one, query } from '../db.js'
 import type { Activity } from '../../shared/types.js'
 
@@ -7,14 +8,28 @@ export function slackConfigured(): boolean {
   return !!(config.slackBotToken && config.slackSigningSecret)
 }
 
-export class SlackError extends Error {}
+export class SlackError extends HttpError {
+  constructor(message: string) {
+    super(502, message)
+  }
+}
 
+/**
+ * Slack Web API call. Form-encoded on purpose: only a subset of methods accept JSON bodies
+ * (users.lookupByEmail and users.info do not), while every method accepts form encoding.
+ * Nested values (blocks, attachments) are JSON-stringified, as Slack expects.
+ */
 export async function slackCall<T = Record<string, unknown>>(method: string, body: Record<string, unknown>): Promise<T & { ok: boolean }> {
   if (!config.slackBotToken) throw new SlackError('SLACK_BOT_TOKEN is not configured')
+  const form = new URLSearchParams()
+  for (const [k, v] of Object.entries(body)) {
+    if (v === undefined || v === null) continue
+    form.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v))
+  }
   const res = await fetch(`https://slack.com/api/${method}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: `Bearer ${config.slackBotToken}` },
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8', Authorization: `Bearer ${config.slackBotToken}` },
+    body: form.toString(),
   })
   const data = (await res.json()) as T & { ok: boolean; error?: string }
   if (!data.ok) throw new SlackError(`Slack ${method}: ${data.error ?? res.status}`)
