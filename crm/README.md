@@ -261,7 +261,18 @@ prints it. Add that URL to the OAuth client's JavaScript origins (and `<url>/api
 to its redirect URIs if you want Gmail sync in staging). The app shows a yellow STAGING banner.
 `WITH_SLACK=0` keeps Slack off staging so test tasks never message real people.
 
-### 3. Continuous deploys
+### Day-to-day deploys (no setup needed)
+
+```bash
+~/vibes/crm/deploy/prod.sh        # production, latest code on the current branch
+~/vibes/crm/deploy/staging.sh     # the sandbox
+```
+
+Both pull the latest code first. While `crm.ecolens.io` is not live, prefix the production one with
+`BASE_URL=https://<run.app URL>`. The Google client secret is read from Secret Manager once stored,
+so no secrets need typing on later runs.
+
+### 3. Continuous deploys (optional)
 
 Once the services exist (step 2 ran once for production and once for staging), Cloud Build deploys
 on every push. One-time setup, in Cloud Shell:
