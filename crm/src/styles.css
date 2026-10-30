@@ -111,7 +111,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .shell { display: flex; min-height: 100%; }
 .sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: #10231a; color: #d8e3dc; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
 .sidebar .brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 14px; font-weight: 700; font-size: 16px; color: #fff; }
-.sidebar .brand .logo { width: 28px; height: 28px; border-radius: 8px; background: var(--brand); display: grid; place-items: center; font-size: 16px; }
+.sidebar .brand .logo { width: 28px; height: 28px; border-radius: 8px; object-fit: contain; display: block; }
 .sidebar nav { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; }
 .sidebar nav a { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; color: #c3d1c8; font-weight: 500; }
 .sidebar nav a:hover { background: rgba(255, 255, 255, 0.06); text-decoration: none; color: #fff; }
@@ -293,7 +293,7 @@ table.table { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* ---- Login ---- */
 .login { min-height: 100vh; display: grid; place-items: center; background: radial-gradient(1200px 600px at 20% -10%, var(--login-glow, #d9efe2), transparent), var(--bg); padding: 20px; }
 .login .box { width: min(420px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; box-shadow: var(--shadow); text-align: center; }
-.login .box .logo { width: 48px; height: 48px; border-radius: 12px; background: var(--brand); display: grid; place-items: center; font-size: 24px; margin: 0 auto 14px; }
+.login .box .logo { width: 56px; height: 56px; border-radius: 12px; object-fit: contain; display: block; margin: 0 auto 14px; }
 .login .box h1 { margin-bottom: 4px; }
 .login .gsi { display: flex; justify-content: center; margin: 22px 0 10px; min-height: 44px; }
 .login .dev { margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--border); text-align: left; }

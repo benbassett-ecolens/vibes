@@ -66,7 +66,7 @@ function Shell() {
     <RefProvider>
       <div className="shell">
         <aside className="sidebar">
-          <div className="brand"><span className="logo">🌱</span><span>Ecolens CRM</span></div>
+          <div className="brand"><img className="logo" src="/brand/logo.png" alt="" /><span>Ecolens CRM</span></div>
           <nav>
             {NAV.map((n) => (
               <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'active' : '')}>

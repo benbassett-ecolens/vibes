@@ -102,7 +102,7 @@ export function LoginPage() {
   return (
     <div className="login">
       <div className="box">
-        <div className="logo">🌱</div>
+        <img className="logo" src="/brand/logo.png" alt="" />
         <h1>Ecolens CRM</h1>
         <p className="muted">Sign in with your {cfg?.allowedDomain ?? 'ecolens.io'} Google account.</p>
         {cfg && !cfg.googleClientId && !cfg.devMode && <p className="error-box" style={{ marginTop: 16 }}>Google sign-in is not configured (GOOGLE_CLIENT_ID).</p>}
