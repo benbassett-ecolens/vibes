@@ -22,6 +22,8 @@ export function CompaniesPage() {
     { key: 'name', label: 'Company', sortable: true, render: (c) => <strong>{c.name}</strong> },
     { key: 'industry', label: 'Industry', sortable: true, render: (c) => c.industry ?? <span className="muted">—</span> },
     { key: 'domain', label: 'Domain', render: (c) => c.domain ?? <span className="muted">—</span> },
+    { key: 'ecosystems', label: 'Ecosystems', render: (c) => <span className="small">{c.ecosystems?.join(', ') || <span className="muted">—</span>}</span> },
+    { key: 'partner_type', label: 'Type', sortable: true, render: (c) => c.partner_type ?? <span className="muted">—</span> },
     { key: 'owner', label: 'Owner', sortable: true, render: (c) => c.owner_name ?? '—' },
     { key: 'contacts', label: 'Contacts', sortable: true, num: true, render: (c) => c.contact_count ?? 0 },
     { key: 'open_deals', label: 'Open deals', sortable: true, num: true, render: (c) => c.open_deal_count ?? 0 },

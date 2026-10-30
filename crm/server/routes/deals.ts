@@ -65,7 +65,7 @@ const SORTS: Record<string, string> = {
 
 export const DEAL_SELECT = `
   SELECT d.*, s.name AS stage_name, s.kind AS stage_kind, s.probability, s.rot_after_days,
-    co.name AS company_name, o.name AS owner_name,
+    co.name AS company_name, co.ecosystems AS company_ecosystems, co.partner_type AS company_partner_type, o.name AS owner_name,
     NULLIF(TRIM(CONCAT(ct.first_name, ' ', ct.last_name)), '') AS contact_name,
     ROUND(d.amount * s.probability / 100.0, 2) AS weighted_amount,
     (SELECT title FROM deals r WHERE r.id = d.renewal_of_deal_id) AS renewal_of_title,
@@ -88,6 +88,14 @@ export const DEAL_SELECT = `
 
 async function loadDeal(id: string, client?: pg.PoolClient): Promise<Deal | null> {
   return one<Deal>(`${DEAL_SELECT} WHERE d.id = $1`, [id], client)
+}
+
+/** Deal age buckets (time since creation). */
+const AGE_SQL: Record<string, string> = {
+  lt7: `d.created_at >= now() - interval '7 days'`,
+  '7to30': `d.created_at < now() - interval '7 days' AND d.created_at >= now() - interval '30 days'`,
+  '30to90': `d.created_at < now() - interval '30 days' AND d.created_at >= now() - interval '90 days'`,
+  gt90: `d.created_at < now() - interval '90 days'`,
 }
 
 /** Attention flags, computed in SQL so lists and reports agree with the board. */
@@ -120,6 +128,9 @@ function buildFilters(q: Record<string, unknown>): { where: string[]; params: un
     if (f) where.push(f)
   }
   if (typeof q.deal_type === 'string' && ['new_business', 'renewal', 'upsell'].includes(q.deal_type)) add('d.deal_type = ?', q.deal_type)
+  if (typeof q.age === 'string' && q.age in AGE_SQL) where.push(AGE_SQL[q.age])
+  if (typeof q.product_id === 'string' && q.product_id) add('EXISTS (SELECT 1 FROM deal_products dp WHERE dp.deal_id = d.id AND dp.product_id = ?)', q.product_id)
+  if (typeof q.ecosystem === 'string' && q.ecosystem) add('EXISTS (SELECT 1 FROM unnest(co.ecosystems) e WHERE lower(e) = lower(?))', q.ecosystem)
   if (typeof q.close_from === 'string' && q.close_from) add('d.expected_close_date >= ?', q.close_from)
   if (typeof q.close_to === 'string' && q.close_to) add('d.expected_close_date <= ?', q.close_to)
   return { where, params }

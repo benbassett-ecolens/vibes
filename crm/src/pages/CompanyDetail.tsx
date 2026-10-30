@@ -62,6 +62,8 @@ export function CompanyDetail() {
             <div className="card-b">
               <dl className="kv">
                 <dt>Industry</dt><dd>{c.industry ?? '—'}</dd>
+                <dt>Ecosystems</dt><dd>{c.ecosystems?.length ? c.ecosystems.map((e) => <span key={e} className="badge" style={{ marginRight: 4 }}>{e}</span>) : '—'}</dd>
+                <dt>Partner type</dt><dd>{c.partner_type ?? '—'}</dd>
                 <dt>Website</dt><dd>{c.website ? <a href={c.website} target="_blank" rel="noreferrer">{c.website}</a> : c.domain ?? '—'}</dd>
                 <dt>Phone</dt><dd>{c.phone ?? '—'}</dd>
                 <dt>Address</dt><dd>{c.address ?? '—'}</dd>

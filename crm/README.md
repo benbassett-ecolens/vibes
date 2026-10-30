@@ -348,3 +348,7 @@ POST /api/internal/sync                                          (Bearer SYNC_SE
 GET  /api/reports/summary?pipeline_id&owner_id&from&to
 GET  /api/export/{deals|contacts|companies|activities|stage_history|audit_log}.csv
 ```
+
+### Deal filters
+
+The Deals toolbar (board and list) filters by owner, flag, deal type, **stage**, **deal age** (created <7 days, 7–30, 30–90, >90 days), **product** (deals that carry that product line) and **company ecosystem** (Microsoft, Acumatica, NetSuite, …). Filters live in the URL so a filtered view can be bookmarked or shared. Ecosystems and partner type are fields on the company (set in the company form; the CSV importer fills them from the Ecosystem / Type columns).

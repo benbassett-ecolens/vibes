@@ -238,11 +238,12 @@ export async function commitImport(csv: string, opts: ImportOptions): Promise<Im
         const ownerId = r.owner ? ownerIds.get(r.owner) ?? null : null
         // Company
         let company = await one<{ id: string }>('SELECT id FROM companies WHERE lower(name) = $1', [r.company.toLowerCase()], client)
-        const companyNotes = [r.partner_type && `Type: ${r.partner_type}`, r.ecosystem && `Ecosystem: ${r.ecosystem}`, r.bu && `Ecolens BU: ${r.bu}`].filter(Boolean).join('\n') || null
+        const companyNotes = [r.bu && `Ecolens BU: ${r.bu}`].filter(Boolean).join('\n') || null
         if (!company) {
+          const ecosystems = (r.ecosystem ?? '').split(',').map((x) => x.trim()).filter(Boolean)
           company = (await one<{ id: string }>(
-            `INSERT INTO companies (name, industry, website, notes, owner_id, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-            [r.company, r.industry, r.website, companyNotes, ownerId, opts.actorId],
+            `INSERT INTO companies (name, industry, website, notes, owner_id, created_by, ecosystems, partner_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+            [r.company, r.industry, r.website, companyNotes, ownerId, opts.actorId, ecosystems, r.partner_type],
             client,
           ))!
           result.companies_created++

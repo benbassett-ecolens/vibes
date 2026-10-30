@@ -16,6 +16,7 @@ export interface User {
 
 export type StageKind = 'open' | 'won' | 'lost'
 export type DealType = 'new_business' | 'renewal' | 'upsell'
+export type DealAge = 'lt7' | '7to30' | '30to90' | 'gt90'
 export type DealFlag = 'close_overdue' | 'activity_overdue' | 'no_next_step' | 'rotting'
 export type ForecastCategory = 'pipeline' | 'best_case' | 'commit' | 'closed' | 'omitted'
 
@@ -52,6 +53,8 @@ export interface Company {
   phone: string | null
   address: string | null
   notes: string | null
+  ecosystems: string[]
+  partner_type: string | null
   owner_id: string | null
   owner_name?: string | null
   created_by: string | null
@@ -94,6 +97,8 @@ export interface Deal {
   currency: string
   company_id: string | null
   company_name?: string | null
+  company_ecosystems?: string[]
+  company_partner_type?: string | null
   contact_id: string | null
   contact_name?: string | null
   owner_id: string | null

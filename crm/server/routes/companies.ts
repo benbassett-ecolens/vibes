@@ -15,12 +15,15 @@ const companySchema = z.object({
   phone: z.string().trim().max(60).nullable().optional(),
   address: z.string().trim().max(500).nullable().optional(),
   notes: z.string().max(10000).nullable().optional(),
+  ecosystems: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+  partner_type: z.string().trim().max(40).nullable().optional(),
   owner_id: z.string().uuid().nullable().optional(),
 })
 
 const SORTS: Record<string, string> = {
   name: 'lower(c.name)',
   industry: 'lower(c.industry)',
+  partner_type: 'lower(c.partner_type)',
   owner: 'lower(o.name)',
   contacts: 'contact_count',
   open_deals: 'open_deal_count',
@@ -54,10 +57,25 @@ companiesRouter.get(
       params.push(q.owner_id)
       where.push(`c.owner_id = $${params.length}`)
     }
+    if (typeof q.ecosystem === 'string' && q.ecosystem) {
+      params.push(q.ecosystem)
+      where.push(`EXISTS (SELECT 1 FROM unnest(c.ecosystems) e WHERE lower(e) = lower($${params.length}))`)
+    }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
     const total = (await one<{ n: number }>(`SELECT COUNT(*)::int AS n FROM companies c ${whereSql}`, params))!.n
     const items = await query<Company>(`${LIST_SELECT} ${whereSql} ORDER BY ${sql}, c.id LIMIT ${limit} OFFSET ${offset}`, params)
     res.json({ items, total, limit, offset })
+  }),
+)
+
+/** Distinct ecosystem values in use (for filters and form suggestions). */
+companiesRouter.get(
+  '/ecosystems',
+  wrap(async (_req, res) => {
+    const rows = await query<{ value: string; n: number }>(
+      `SELECT e AS value, COUNT(*)::int AS n FROM companies c, unnest(c.ecosystems) e WHERE c.archived_at IS NULL GROUP BY e ORDER BY n DESC, e`,
+    )
+    res.json({ items: rows })
   }),
 )
 
@@ -76,9 +94,9 @@ companiesRouter.post(
     const body = parse(companySchema, req.body)
     const created = await withTransaction(async (client) => {
       const c = (await one<Company>(
-        `INSERT INTO companies (name, domain, website, industry, phone, address, notes, owner_id, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-        [body.name, body.domain ?? null, body.website ?? null, body.industry ?? null, body.phone ?? null, body.address ?? null, body.notes ?? null, body.owner_id ?? req.user.id, req.user.id],
+        `INSERT INTO companies (name, domain, website, industry, phone, address, notes, owner_id, created_by, ecosystems, partner_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+        [body.name, body.domain ?? null, body.website ?? null, body.industry ?? null, body.phone ?? null, body.address ?? null, body.notes ?? null, body.owner_id ?? req.user.id, req.user.id, body.ecosystems ?? [], body.partner_type ?? null],
         client,
       ))!
       await audit(client, { entityType: 'company', entityId: c.id, action: 'create', actorId: req.user.id, changes: { ...body }, summary: `Created company ${c.name}` })
@@ -97,9 +115,9 @@ companiesRouter.patch(
     const next = { ...before, ...body }
     await withTransaction(async (client) => {
       const after = (await one<Company>(
-        `UPDATE companies SET name = $2, domain = $3, website = $4, industry = $5, phone = $6, address = $7, notes = $8, owner_id = $9
+        `UPDATE companies SET name = $2, domain = $3, website = $4, industry = $5, phone = $6, address = $7, notes = $8, owner_id = $9, ecosystems = $10, partner_type = $11
          WHERE id = $1 RETURNING *`,
-        [before.id, next.name, next.domain, next.website, next.industry, next.phone, next.address, next.notes, next.owner_id],
+        [before.id, next.name, next.domain, next.website, next.industry, next.phone, next.address, next.notes, next.owner_id, next.ecosystems ?? [], next.partner_type],
         client,
       ))!
       const changes = diff(before as never, after as never)

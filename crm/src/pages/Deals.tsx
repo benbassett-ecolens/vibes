@@ -8,7 +8,7 @@ import { useRefData } from '../refdata'
 import { DealForm } from '../components/Forms'
 import { OwnerSelect } from '../components/Pickers'
 import { Avatar, Modal, Pager, SortableTable, useSort, useToast, type Column } from '../components/ui'
-import type { Deal, DealFlag, Paged, Stage } from '../../shared/types'
+import type { Deal, DealFlag, Paged, Product, Stage } from '../../shared/types'
 import { DEAL_TYPES, DEAL_TYPE_LABEL } from '../../shared/pricing'
 import { Field } from '../components/ui'
 import { ApiError } from '../api'
@@ -221,6 +221,7 @@ function DealList({ pipelineId, filters }: { pipelineId: string; filters: Record
     { key: 'weighted', label: 'Weighted', sortable: true, num: true, render: (d) => <span className="muted">{money(d.weighted_amount, d.currency)}</span> },
     { key: 'owner', label: 'Owner', sortable: true, render: (d) => <span className="row"><Avatar name={d.owner_name} /> {d.owner_name ?? '—'}</span> },
     { key: 'type', label: 'Type', render: (d) => <span className="muted small">{DEAL_TYPE_LABEL[d.deal_type]}</span> },
+    { key: 'ecosystem', label: 'Ecosystem', render: (d) => <span className="muted small">{(d.company_ecosystems ?? []).join(', ') || '—'}</span> },
     { key: 'expected_close_date', label: 'Expected close', sortable: true, render: (d) => <span className={d.stage_kind === 'open' && d.expected_close_date && new Date(`${d.expected_close_date}T23:59:59`) < new Date() ? 'error' : ''}>{fmtDate(d.expected_close_date)}</span> },
     { key: 'flags', label: 'Flags', render: (d) => <span className="row wrap" style={{ gap: 4 }}>{dealFlags(d).map((f) => <span key={f.key} className={`flag ${f.kind}`}>{f.label}</span>)}</span> },
     { key: 'stage_entered_at', label: 'In stage', sortable: true, num: true, render: (d) => `${daysBetween(d.stage_entered_at)}d` },
@@ -252,13 +253,21 @@ export function DealsPage() {
   const status = params.get('status') ?? ''
   const flag = params.get('flag') ?? ''
   const dealType = params.get('type') ?? ''
+  const stageId = params.get('stage') ?? ''
+  const age = params.get('age') ?? ''
+  const productId = params.get('product') ?? ''
+  const ecosystem = params.get('ecosystem') ?? ''
+  const products = useQuery(() => api.get<{ items: Product[] }>('/api/products?all=true'), [])
+  const ecosystems = useQuery(() => api.get<{ items: Array<{ value: string; n: number }> }>('/api/companies/ecosystems'), [])
+  const activeFilters = [owner, flag, dealType, stageId, age, productId, ecosystem].filter(Boolean).length
   const setParam = (k: string, v: string) => {
     const next = new URLSearchParams(params)
     if (v) next.set(k, v)
     else next.delete(k)
     setParams(next, { replace: true })
   }
-  const filters = useMemo(() => ({ q: dq, owner_id: owner, flag, deal_type: dealType, ...(view === 'list' && status ? { status } : {}) }), [dq, owner, status, view, flag, dealType])
+  const filters = useMemo(() => ({ q: dq, owner_id: owner, flag, deal_type: dealType, stage_id: stageId, age, product_id: productId, ecosystem, ...(view === 'list' && status ? { status } : {}) }), [dq, owner, status, view, flag, dealType, stageId, age, productId, ecosystem])
+  const currentPipeline = pipelines.find((p) => p.id === pipelineId)
 
   if (!loaded) return <div className="content muted">Loading…</div>
   if (!pipelines.length) return <div className="content"><div className="card pad">No pipelines yet. Create one in Settings.</div></div>
@@ -290,6 +299,26 @@ export function DealsPage() {
             <option value="">All types</option>
             {DEAL_TYPES.map((t) => <option key={t} value={t}>{DEAL_TYPE_LABEL[t]}</option>)}
           </select>
+          <select className="select" value={stageId} onChange={(e) => setParam('stage', e.target.value)} title="Stage">
+            <option value="">Any stage</option>
+            {currentPipeline?.stages.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+          </select>
+          <select className="select" value={age} onChange={(e) => setParam('age', e.target.value)} title="Deal age (since created)">
+            <option value="">Any age</option>
+            <option value="lt7">Created &lt; 7 days ago</option>
+            <option value="7to30">7–30 days</option>
+            <option value="30to90">30–90 days</option>
+            <option value="gt90">Older than 90 days</option>
+          </select>
+          <select className="select" value={productId} onChange={(e) => setParam('product', e.target.value)} title="Has product">
+            <option value="">Any product</option>
+            {(products.data?.items ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <select className="select" value={ecosystem} onChange={(e) => setParam('ecosystem', e.target.value)} title="Company ecosystem">
+            <option value="">Any ecosystem</option>
+            {(ecosystems.data?.items ?? []).map((e) => <option key={e.value} value={e.value}>{e.value} ({e.n})</option>)}
+          </select>
+          {activeFilters > 0 && <button className="btn sm ghost" onClick={() => setParams(new URLSearchParams(pipelineId ? { pipeline: pipelineId } : {}), { replace: true })}>Clear filters ({activeFilters})</button>}
           {view === 'list' && (
             <select className="select" value={status} onChange={(e) => setParam('status', e.target.value)}>
               <option value="">All statuses</option>

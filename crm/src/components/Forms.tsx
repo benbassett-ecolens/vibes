@@ -221,6 +221,8 @@ export function CompanyForm({ initial, onClose, onSaved }: { initial?: Company; 
     address: initial?.address ?? '',
     owner_id: initial?.owner_id ?? user?.id ?? null,
     notes: initial?.notes ?? '',
+    ecosystems: (initial?.ecosystems ?? []).join(', '),
+    partner_type: initial?.partner_type ?? '',
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -230,7 +232,7 @@ export function CompanyForm({ initial, onClose, onSaved }: { initial?: Company; 
     setBusy(true)
     setError(null)
     try {
-      const body = { name: form.name, domain: form.domain || null, website: form.website || null, industry: form.industry || null, phone: form.phone || null, address: form.address || null, owner_id: form.owner_id, notes: form.notes || null }
+      const body = { name: form.name, domain: form.domain || null, website: form.website || null, industry: form.industry || null, phone: form.phone || null, address: form.address || null, owner_id: form.owner_id, notes: form.notes || null, ecosystems: form.ecosystems.split(',').map((x) => x.trim()).filter(Boolean), partner_type: form.partner_type || null }
       const c = initial ? await api.patch<Company>(`/api/companies/${initial.id}`, body) : await api.post<Company>('/api/companies', body)
       toast(initial ? 'Company updated' : 'Company created')
       onSaved(c)
@@ -250,6 +252,12 @@ export function CompanyForm({ initial, onClose, onSaved }: { initial?: Company; 
           <Field label="Industry"><input className="input" value={form.industry} onChange={(e) => set({ industry: e.target.value })} /></Field>
           <Field label="Phone"><input className="input" value={form.phone} onChange={(e) => set({ phone: e.target.value })} /></Field>
           <Field label="Address" span2><input className="input" value={form.address} onChange={(e) => set({ address: e.target.value })} /></Field>
+          <Field label="Ecosystems (comma-separated)"><input className="input" list="ecosystem-options" placeholder="Microsoft, Acumatica, NetSuite" value={form.ecosystems} onChange={(e) => set({ ecosystems: e.target.value })} /><datalist id="ecosystem-options"><option value="Microsoft" /><option value="Acumatica" /><option value="NetSuite" /><option value="Sage" /><option value="SAP-B1" /><option value="Other" /></datalist></Field>
+          <Field label="Partner type">
+            <select className="select" value={form.partner_type} onChange={(e) => set({ partner_type: e.target.value })}>
+              <option value="">—</option><option value="ISV">ISV</option><option value="VAR">VAR</option><option value="ISV, VAR">ISV, VAR</option><option value="Other">Other</option>
+            </select>
+          </Field>
           <Field label="Owner"><OwnerSelect value={form.owner_id} onChange={(id) => set({ owner_id: id })} /></Field>
           <Field label="Notes" span2><textarea className="textarea" value={form.notes} onChange={(e) => set({ notes: e.target.value })} /></Field>
         </div>
