@@ -7,7 +7,8 @@ import { audit } from '../audit.js'
 import { requireAuth } from '../auth.js'
 import { forbidden, parse, wrap } from '../http.js'
 import { crmUserForSlack, postTaskCard, slackCall, slackConfigured, slackUserIdFor, updateTaskCard, verifySlackSignature } from './client.js'
-import type { SlackStatus } from '../../shared/types.js'
+import { dismissInbox, followupView, loadInbox, logInbox, rankDeals, receiveDm, reopenInbox, type InboxFile } from './textlog.js'
+import type { SlackInboxItem, SlackStatus } from '../../shared/types.js'
 
 type RawReq = express.Request & { rawBody?: string }
 
@@ -38,14 +39,69 @@ slackWebhookRouter.post(
     const payload = JSON.parse((req.body as { payload?: string }).payload ?? '{}') as {
       type: string
       user?: { id: string }
-      actions?: Array<{ action_id: string; value?: string }>
+      trigger_id?: string
+      actions?: Array<{ action_id: string; value?: string; selected_option?: { value: string } }>
+      view?: { callback_id?: string; private_metadata?: string; state?: { values: Record<string, Record<string, { value?: string | null }>> } }
+    }
+    if (payload.type === 'view_submission') {
+      // "Add follow-up" modal from a logged text message → a task on the same deal.
+      const actor = payload.user ? await crmUserForSlack(payload.user.id) : null
+      const inbox = payload.view?.private_metadata ? await loadInbox(payload.view.private_metadata) : null
+      const what = payload.view?.state?.values.what?.v?.value?.trim()
+      if (!actor || !inbox || !what || payload.view?.callback_id !== 'log_followup_submit') {
+        res.json({ response_action: 'errors', errors: { what: 'Something went wrong. Open the CRM to add the to-do.' } })
+        return
+      }
+      const deal = inbox.activity_id ? await one<{ deal_id: string | null }>('SELECT deal_id FROM activities WHERE id = $1', [inbox.activity_id]) : null
+      const due = parseWhen(payload.view?.state?.values.when?.v?.value ?? undefined)
+      const a = (await one<{ id: string }>(
+        `INSERT INTO activities (type, subject, deal_id, owner_id, due_at, created_by) VALUES ('task', $1, $2, $3, $4, $3) RETURNING id`,
+        [what, deal?.deal_id ?? null, actor.id, due],
+      ))!
+      if (deal?.deal_id) await query('UPDATE activities a SET contact_id = d.contact_id, company_id = d.company_id FROM deals d WHERE a.id = $1 AND d.id = a.deal_id', [a.id])
+      await audit(pool, { entityType: 'activity', entityId: a.id, action: 'create', actorId: actor.id, changes: { type: 'task', subject: what, deal_id: deal?.deal_id ?? null, via: 'slack' }, summary: `Created follow-up from Slack: ${what}` })
+      res.json({ response_action: 'clear' }) // close the modal first; Slack needs the ack within 3s
+      await postTaskCard(a.id)
+      return
+    }
+    if (payload.type !== 'block_actions') {
+      res.status(200).end()
+      return
+    }
+    const action = payload.actions?.[0]
+    const value = action?.value ?? action?.selected_option?.value
+    if (!action || !value || !payload.user) {
+      res.status(200).end()
+      return
+    }
+    const actor = await crmUserForSlack(payload.user.id)
+    if (!actor) {
+      res.status(200).end()
+      return
+    }
+    // Text-log picker. Cloud Run gives us no CPU after the response, so do the work first and ack after
+    // (each branch is one or two Slack calls, well inside Slack's 3s window). Errors are logged, never retried.
+    if (action.action_id.startsWith('log_')) {
+      try {
+        if (action.action_id.startsWith('log_pick') || action.action_id === 'log_select') {
+          const [inboxId, dealId] = value.split(':')
+          await logInbox(inboxId, dealId, actor)
+        } else if (action.action_id === 'log_dismiss') {
+          await dismissInbox(value, actor)
+        } else if (action.action_id === 'log_change') {
+          await reopenInbox(value)
+        } else if (action.action_id === 'log_followup' && payload.trigger_id) {
+          const inbox = await loadInbox(value)
+          const deal = inbox?.activity_id ? await one<{ title: string }>('SELECT d.title FROM activities a JOIN deals d ON d.id = a.deal_id WHERE a.id = $1', [inbox.activity_id]) : null
+          await slackCall('views.open', { trigger_id: payload.trigger_id, view: followupView(value, deal?.title ?? 'this deal') })
+        }
+      } catch (e) {
+        console.warn(`slack textlog ${action.action_id}:`, (e as Error).message)
+      }
+      res.status(200).end()
+      return
     }
     res.status(200).end() // Slack wants an ack within 3s; we update the card via chat.update.
-    if (payload.type !== 'block_actions') return
-    const action = payload.actions?.[0]
-    if (!action?.value || !payload.user) return
-    const actor = await crmUserForSlack(payload.user.id)
-    if (!actor) return
     if (action.action_id === 'task_done' || action.action_id === 'task_reopen') {
       const done = action.action_id === 'task_done'
       const before = await one<{ id: string; completed_at: string | null; subject: string; deal_id: string | null; type: string }>('SELECT id, completed_at, subject, deal_id, type FROM activities WHERE id = $1', [action.value])
@@ -61,6 +117,52 @@ slackWebhookRouter.post(
       })
       await updateTaskCard(before.id, done ? actor.name : null)
     }
+  }),
+)
+
+/**
+ * Events API: a DM to the bot = "log this text message". Slack needs a 2xx within 3 seconds and
+ * retries otherwise; the event_id unique index makes a retry a no-op.
+ */
+slackWebhookRouter.post(
+  '/events',
+  wrap(async (req, res) => {
+    const body = req.body as {
+      type: string
+      challenge?: string
+      event_id?: string
+      event?: { type: string; subtype?: string; channel_type?: string; channel: string; user?: string; bot_id?: string; ts: string; text?: string; files?: Array<{ id: string; name?: string; mimetype?: string; url_private?: string; size?: number }> }
+    }
+    if (body.type === 'url_verification') {
+      // Slack sends this once when the Request URL is saved in the app config; it is unsigned on purpose.
+      res.json({ challenge: body.challenge })
+      return
+    }
+    guard(req as RawReq)
+    res.setHeader('X-Slack-No-Retry', '1')
+    const ev = body.event
+    if (body.type !== 'event_callback' || !ev || ev.type !== 'message' || ev.channel_type !== 'im' || ev.bot_id || !ev.user) {
+      res.status(200).end()
+      return
+    }
+    if (ev.subtype && ev.subtype !== 'file_share') {
+      res.status(200).end() // edits, deletions, joins…
+      return
+    }
+    const actor = await crmUserForSlack(ev.user)
+    if (!actor) {
+      await slackCall('chat.postMessage', { channel: ev.channel, text: `I couldn't match your Slack account to a CRM user. Sign in at ${config.appBaseUrl} once with your @${config.allowedDomain} account, then try again.` }).catch(() => undefined)
+      res.status(200).end()
+      return
+    }
+    const files: InboxFile[] = (ev.files ?? []).map((f) => ({ id: f.id, name: f.name ?? 'file', mimetype: f.mimetype ?? 'application/octet-stream', url_private: f.url_private ?? '', size: f.size ?? 0 }))
+    try {
+      const row = await receiveDm({ eventId: body.event_id ?? null, userId: actor.id, slackUserId: ev.user, channel: ev.channel, ts: ev.ts, text: ev.text ?? '', files })
+      if (row) console.log(`slack textlog: received ${row.id} from ${actor.email} (${files.length} file(s))`)
+    } catch (e) {
+      console.warn('slack textlog receive:', (e as Error).message)
+    }
+    res.status(200).end()
   }),
 )
 
@@ -215,6 +317,49 @@ slackRouter.post(
     const id = await slackUserIdFor(req.user.id)
     if (!id) throw forbidden(`No Slack user found with the email ${req.user.email}`)
     await slackCall('chat.postMessage', { channel: id, text: `👋 Ecolens CRM is connected. Your tasks will show up here with a "Mark done" button.` })
+    res.json({ ok: true })
+  }),
+)
+
+/** Text messages I shared with the bot that are not attached to a deal yet (the holding list). */
+slackRouter.get(
+  '/inbox',
+  wrap(async (req, res) => {
+    const items = await query<SlackInboxItem>(
+      `SELECT i.id, i.text, i.files, i.status, i.created_at, i.activity_id, a.deal_id, d.title AS deal_title
+       FROM slack_inbox i LEFT JOIN activities a ON a.id = i.activity_id LEFT JOIN deals d ON d.id = a.deal_id
+       WHERE i.user_id = $1 AND i.status = 'pending' ORDER BY i.created_at DESC LIMIT 100`,
+      [req.user.id],
+    )
+    res.json({ items })
+  }),
+)
+
+slackRouter.get(
+  '/inbox/:id/candidates',
+  wrap(async (req, res) => {
+    const row = await loadInbox(String(req.params.id))
+    if (!row || row.user_id !== req.user.id) throw forbidden('Not your message')
+    res.json({ items: await rankDeals(req.user.id, row.text) })
+  }),
+)
+
+slackRouter.post(
+  '/inbox/:id/log',
+  wrap(async (req, res) => {
+    const body = parse(z.object({ deal_id: z.string().uuid() }), req.body ?? {})
+    const row = await loadInbox(String(req.params.id))
+    if (!row || row.user_id !== req.user.id) throw forbidden('Not your message')
+    res.json(await logInbox(row.id, body.deal_id, req.user))
+  }),
+)
+
+slackRouter.post(
+  '/inbox/:id/dismiss',
+  wrap(async (req, res) => {
+    const row = await loadInbox(String(req.params.id))
+    if (!row || row.user_id !== req.user.id) throw forbidden('Not your message')
+    await dismissInbox(row.id, req.user)
     res.json({ ok: true })
   }),
 )

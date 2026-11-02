@@ -4,7 +4,7 @@ import type { Activity, AuditEntry, StageHistoryEntry, TimelineItem } from '../.
 import { api } from '../api'
 import { useToast } from './ui'
 
-export const ACTIVITY_ICON: Record<Activity['type'], string> = { note: '📝', call: '📞', email: '✉️', meeting: '📅', task: '☑️' }
+export const ACTIVITY_ICON: Record<Activity['type'], string> = { note: '📝', call: '📞', email: '✉️', meeting: '📅', task: '☑️', text: '💬' }
 
 const FIELD_LABELS: Record<string, string> = {
   amount: 'Amount', title: 'Name', owner_id: 'Owner', company_id: 'Company', contact_id: 'Contact', expected_close_date: 'Expected close',
@@ -85,16 +85,23 @@ function ActivityRow({ a, onChanged, showDeal }: { a: Activity; onChanged?: () =
           ) : (
             <>
               <span className="who">{a.created_by_name ?? 'Someone'}</span>
-              <span className="muted">{a.completed_at && a.type !== 'task' && a.type !== 'meeting' ? 'logged' : 'scheduled'} {a.type === 'email' ? 'an email' : `a ${a.type}`}</span>
-              <span className="subject">· {a.subject}</span>
-              {a.slack_ts && <span className="flag" title="Mirrored to Slack">Slack</span>}
+              <span className="muted">{a.completed_at && a.type !== 'task' && a.type !== 'meeting' ? 'logged' : 'scheduled'} {a.type === 'email' ? 'an email' : a.type === 'text' ? 'a text message' : `a ${a.type}`}</span>
+              {a.type !== 'text' && <span className="subject">· {a.subject}</span>}
+              {(a.slack_ts || a.source === 'slack') && <span className="flag" title={a.source === 'slack' ? 'Shared from Slack' : 'Mirrored to Slack'}>Slack</span>}
             </>
           )}
           {a.due_at && <span className={`flag ${overdue ? 'danger' : a.completed_at ? '' : 'warn'}`}>{a.completed_at ? 'done' : overdue ? 'overdue' : 'due'} {relative(a.due_at)}</span>}
           {a.owner_name && a.owner_name !== a.created_by_name && <span className="muted small">for {a.owner_name}</span>}
           <span className="when" title={fmtDateTime(a.created_at)}>{relative(a.created_at)}</span>
         </div>
-        {a.body && <div className="tl-body">{a.body}</div>}
+        {a.body && <div className={`tl-body${a.type === 'text' ? ' quote' : ''}`}>{a.body}</div>}
+        {(a.attachments?.length ?? 0) > 0 && (
+          <div className="row wrap" style={{ marginTop: 6, gap: 8 }}>
+            {a.attachments!.map((f) => f.mimetype.startsWith('image/')
+              ? <a key={f.id} href={`/api/attachments/${f.id}`} target="_blank" rel="noreferrer"><img className="tl-thumb" src={`/api/attachments/${f.id}`} alt={f.filename} /></a>
+              : <a key={f.id} className="small" href={`/api/attachments/${f.id}`} target="_blank" rel="noreferrer">📎 {f.filename}</a>)}
+          </div>
+        )}
         <div className="row small muted" style={{ marginTop: 4, gap: 10 }}>
           {showDeal && a.deal_id && <Link to={`/deals/${a.deal_id}`}>{a.deal_title ?? 'Deal'}</Link>}
           {a.contact_name && a.contact_id && <Link to={`/contacts/${a.contact_id}`}>{a.contact_name}</Link>}
@@ -102,7 +109,7 @@ function ActivityRow({ a, onChanged, showDeal }: { a: Activity; onChanged?: () =
           {a.external_url && <a href={a.external_url} target="_blank" rel="noreferrer">Open in {a.source === 'gmail' ? 'Gmail' : 'Calendar'} ↗</a>}
           {a.source === 'gcal' && a.meta?.conference_url && <a href={a.meta.conference_url} target="_blank" rel="noreferrer">Join call ↗</a>}
           {a.source === 'gmail' && (a.meta?.cc?.length ?? 0) > 0 && <span>cc {(a.meta?.cc ?? []).map((c) => c.email).join(', ')}</span>}
-          {onChanged && a.source === 'manual' && <button className="btn ghost sm" style={{ color: 'var(--text-3)' }} onClick={remove}>delete</button>}
+          {onChanged && (a.source === 'manual' || a.source === 'slack') && <button className="btn ghost sm" style={{ color: 'var(--text-3)' }} onClick={remove}>delete</button>}
         </div>
       </div>
     </div>

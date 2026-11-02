@@ -135,7 +135,7 @@ export interface Deal {
   rot_after_days?: number | null
 }
 
-export type ActivityType = 'note' | 'call' | 'email' | 'meeting' | 'task'
+export type ActivityType = 'note' | 'call' | 'email' | 'meeting' | 'task' | 'text'
 
 export interface Activity {
   id: string
@@ -163,9 +163,29 @@ export interface Activity {
   external_url: string | null
   ends_at: string | null
   meta: ActivityMeta
+  attachments?: Attachment[]
 }
 
-export type ActivitySource = 'manual' | 'gmail' | 'gcal'
+export type ActivitySource = 'manual' | 'gmail' | 'gcal' | 'slack'
+
+export interface Attachment {
+  id: string
+  filename: string
+  mimetype: string
+  size: number
+}
+
+/** A text message shared to the Slack bot that is still waiting for a deal. */
+export interface SlackInboxItem {
+  id: string
+  text: string
+  files: Array<{ id: string; name: string; mimetype: string; size: number }>
+  status: 'pending' | 'logged' | 'dismissed'
+  created_at: string
+  activity_id: string | null
+  deal_id: string | null
+  deal_title: string | null
+}
 
 export interface EmailParty {
   name: string | null

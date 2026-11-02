@@ -56,7 +56,7 @@ export function ActivitiesPage() {
           <OwnerSelect value={owner} onChange={setOwner} allowAll />
           <select className="select" value={type} onChange={(e) => setType(e.target.value)}>
             <option value="">All types</option>
-            {(['task', 'meeting', 'call', 'email', 'note'] as const).map((t) => <option key={t} value={t}>{t}</option>)}
+            {(['task', 'meeting', 'call', 'email', 'text', 'note'] as const).map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
           <select className="select" value={source} onChange={(e) => setSource(e.target.value)}>
             <option value="">Any source</option>

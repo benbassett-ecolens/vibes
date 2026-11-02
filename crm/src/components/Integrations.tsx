@@ -5,7 +5,7 @@ import { fmtDateTime, relative } from '../format'
 import { useQuery } from '../hooks'
 import { Field, Modal, useToast } from './ui'
 import { CompanyPicker } from './Pickers'
-import type { GoogleStatus, SlackStatus, UnmatchedItem } from '../../shared/types'
+import type { GoogleStatus, SlackInboxItem, SlackStatus, UnmatchedItem } from '../../shared/types'
 
 const GOOGLE_MESSAGES: Record<string, string> = {
   connected: 'Google account connected. The first sync is running in the background.',
@@ -226,6 +226,61 @@ export function GoogleCard() {
   )
 }
 
+function InboxRow({ item, onDone }: { item: SlackInboxItem; onDone: () => void }) {
+  const toast = useToast()
+  const cands = useQuery(() => api.get<{ items: Array<{ id: string; title: string; company_name: string | null; score: number }> }>(`/api/slack/inbox/${item.id}/candidates`), [item.id])
+  const [deal, setDeal] = useState('')
+  const [busy, setBusy] = useState(false)
+  const chosen = deal || cands.data?.items[0]?.id || ''
+  const act = async (fn: () => Promise<unknown>, msg: string) => {
+    setBusy(true)
+    try {
+      await fn()
+      toast(msg)
+      onDone()
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="inbox-item">
+      <div>
+        <div className="q">{item.text || <span className="muted">(no text)</span>}</div>
+        <div className="small muted" style={{ marginTop: 4 }}>
+          {relative(item.created_at)}{item.files.length > 0 && <> · 📎 {item.files.map((f) => f.name).join(', ')}</>}
+        </div>
+      </div>
+      <div className="row" style={{ gap: 6 }}>
+        <select className="select sm" value={chosen} onChange={(e) => setDeal(e.target.value)} style={{ maxWidth: 260 }}>
+          {!cands.data?.items.length && <option value="">No open deals</option>}
+          {(cands.data?.items ?? []).map((c) => <option key={c.id} value={c.id}>{c.title}{c.company_name && c.company_name !== c.title ? ` · ${c.company_name}` : ''}</option>)}
+        </select>
+        <button className="btn primary sm" disabled={busy || !chosen} onClick={() => act(() => api.post(`/api/slack/inbox/${item.id}/log`, { deal_id: chosen }), 'Logged')}>Log</button>
+        <button className="btn ghost sm" disabled={busy} onClick={() => act(() => api.post(`/api/slack/inbox/${item.id}/dismiss`), 'Dismissed')}>Not a deal</button>
+      </div>
+    </div>
+  )
+}
+
+export function SlackInbox() {
+  const inbox = useQuery(() => api.get<{ items: SlackInboxItem[] }>('/api/slack/inbox'), [])
+  const items = inbox.data?.items ?? []
+  return (
+    <div className="card">
+      <div className="card-h"><h2>Text messages from Slack</h2><span className="muted small right">{items.length ? `${items.length} waiting for a deal` : 'nothing waiting'}</span></div>
+      <div className="card-b">
+        <p className="small muted" style={{ marginBottom: 8 }}>
+          From your phone, share a text (or a screenshot of one) to the <strong>Ecolens CRM</strong> bot in Slack and tap the deal it belongs to. It lands on the deal's timeline as a text message.
+          Anything you shared but did not attach to a deal waits here.
+        </p>
+        {items.map((it) => <InboxRow key={it.id} item={it} onDone={() => void inbox.refresh()} />)}
+      </div>
+    </div>
+  )
+}
+
 export function SlackCard() {
   const toast = useToast()
   const status = useQuery(() => api.get<SlackStatus>('/api/slack/status'), [])
@@ -260,6 +315,7 @@ export function SlackCard() {
             <p className="small muted" style={{ marginBottom: 10 }}>
               Each task assigned to you is sent to you as a Slack DM with a <strong>Mark done</strong> button. Completing it in Slack completes it here, and completing it here updates the Slack card.
               In Slack, <code>/todo Send proposal to Acme | tomorrow 9am</code> creates a task in the CRM. See <Link to="/activities">Tasks</Link>.
+              Sharing a text message to the bot as a DM logs it on a deal (buttons, no typing).
             </p>
             <div className="row wrap">
               {!s.me_linked && <button className="btn primary sm" disabled={busy} onClick={() => run(() => api.post('/api/slack/link'), 'Linked by email')}>Link my Slack account</button>}

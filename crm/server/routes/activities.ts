@@ -9,7 +9,7 @@ import { deleteTaskCard, postTaskCard, slackSafe, updateTaskCard } from '../slac
 export const activitiesRouter = Router()
 
 const activitySchema = z.object({
-  type: z.enum(['note', 'call', 'email', 'meeting', 'task']),
+  type: z.enum(['note', 'call', 'email', 'meeting', 'task', 'text']),
   subject: z.string().trim().min(1).max(300),
   body: z.string().max(20000).nullable().optional(),
   deal_id: z.string().uuid().nullable().optional(),
@@ -32,7 +32,9 @@ const SORTS: Record<string, string> = {
 
 const SELECT = `
   SELECT a.*, o.name AS owner_name, cb.name AS created_by_name, d.title AS deal_title, co.name AS company_name,
-    NULLIF(TRIM(CONCAT(ct.first_name, ' ', ct.last_name)), '') AS contact_name
+    NULLIF(TRIM(CONCAT(ct.first_name, ' ', ct.last_name)), '') AS contact_name,
+    COALESCE((SELECT json_agg(json_build_object('id', at.id, 'filename', at.filename, 'mimetype', at.mimetype, 'size', at.size) ORDER BY at.created_at)
+              FROM attachments at WHERE at.activity_id = a.id), '[]'::json) AS attachments
   FROM activities a
   LEFT JOIN users o ON o.id = a.owner_id
   LEFT JOIN users cb ON cb.id = a.created_by

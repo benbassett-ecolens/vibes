@@ -14,6 +14,7 @@ import { companiesRouter } from './routes/companies.js'
 import { contactsRouter } from './routes/contacts.js'
 import { dealsRouter } from './routes/deals.js'
 import { activitiesRouter } from './routes/activities.js'
+import { attachmentsRouter } from './routes/attachments.js'
 import { auditRouter } from './routes/audit.js'
 import { reportsRouter } from './routes/reports.js'
 import { exportsRouter } from './routes/exports.js'
@@ -77,6 +78,7 @@ export function createApp(): express.Express {
   app.use('/api/link', linkerRouter)
   app.use('/api/admin', adminRouter)
   app.use('/api/activities', activitiesRouter)
+  app.use('/api/attachments', requireAuth, attachmentsRouter)
   app.use('/api/audit', auditRouter)
   app.use('/api/reports', reportsRouter)
   app.use('/api/export', exportsRouter)

@@ -5,7 +5,7 @@ import { fmtDateTime } from '../format'
 import { useRefData } from '../refdata'
 import { Avatar, ConfirmButton, Field, Modal, useToast } from '../components/ui'
 import type { Pipeline, Product, Stage, User } from '../../shared/types'
-import { GoogleCard, SlackCard } from '../components/Integrations'
+import { GoogleCard, SlackCard, SlackInbox } from '../components/Integrations'
 import { ImportCard } from '../components/ImportCard'
 import { LinkCard } from '../components/LinkCard'
 import { PRICING_LABEL } from '../../shared/pricing'
@@ -266,6 +266,7 @@ export function SettingsPage() {
         <div className="grid c2">
           <GoogleCard />
           <SlackCard />
+          <SlackInbox />
         </div>
 
         <ProductsCard isAdmin={isAdmin} />
