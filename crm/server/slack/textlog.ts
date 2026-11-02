@@ -18,6 +18,7 @@ export interface InboxRow {
   slack_user_id: string
   channel: string
   ts: string
+  thread_ts: string | null // set when shared in a channel: the card lives in a thread under the share
   card_ts: string | null
   text: string
   files: InboxFile[]
@@ -133,13 +134,13 @@ export async function loadInbox(id: string): Promise<InboxRow | null> {
 }
 
 /** A DM arrived. Store it and reply with the deal picker. Returns the inbox row, or null when ignored. */
-export async function receiveDm(opts: { eventId: string | null; userId: string; slackUserId: string; channel: string; ts: string; text: string; files: InboxFile[] }): Promise<InboxRow | null> {
+export async function receiveDm(opts: { eventId: string | null; userId: string; slackUserId: string; channel: string; ts: string; threadTs?: string | null; text: string; files: InboxFile[] }): Promise<InboxRow | null> {
   if (!opts.text.trim() && !opts.files.length) return null
   const row = await one<InboxRow>(
-    `INSERT INTO slack_inbox (event_id, user_id, slack_user_id, channel, ts, text, files)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO slack_inbox (event_id, user_id, slack_user_id, channel, ts, thread_ts, text, files)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (event_id) DO NOTHING RETURNING *`,
-    [opts.eventId, opts.userId, opts.slackUserId, opts.channel, opts.ts, opts.text, JSON.stringify(opts.files)],
+    [opts.eventId, opts.userId, opts.slackUserId, opts.channel, opts.ts, opts.threadTs ?? null, opts.text, JSON.stringify(opts.files)],
   )
   if (!row) return null // Slack retry of an event we already handled
   await postPicker(row)
@@ -152,7 +153,7 @@ export async function postPicker(row: InboxRow): Promise<void> {
   if (row.card_ts) {
     await slackCall('chat.update', { channel: row.channel, ts: row.card_ts, text: 'Which deal is this about?', blocks })
   } else {
-    const r = await slackCall<{ ts: string }>('chat.postMessage', { channel: row.channel, text: 'Which deal is this about?', blocks })
+    const r = await slackCall<{ ts: string }>('chat.postMessage', { channel: row.channel, thread_ts: row.thread_ts ?? undefined, text: 'Which deal is this about?', blocks })
     await query('UPDATE slack_inbox SET card_ts = $2 WHERE id = $1', [row.id, r.ts])
   }
 }

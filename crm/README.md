@@ -92,14 +92,14 @@ features:
     messages_tab_read_only_enabled: false
 oauth_config:
   scopes:
-    bot: [chat:write, im:write, im:history, files:read, users:read, users:read.email, commands]
+    bot: [chat:write, im:write, im:history, channels:history, groups:history, files:read, users:read, users:read.email, commands]
 settings:
   interactivity:
     is_enabled: true
     request_url: https://crm.ecolens.io/api/slack/webhooks/interactions
   event_subscriptions:
     request_url: https://crm.ecolens.io/api/slack/webhooks/events
-    bot_events: [message.im]
+    bot_events: [message.im, message.channels, message.groups]
 ```
 
 How it stays in sync: the CRM posts a Block Kit card (with the task's deal, contact, due date and a
@@ -115,7 +115,9 @@ automatically; Settings has a "Send test DM" and "Send my open tasks to Slack" b
 
 Ecolens does not own the phone numbers reps text from, so there is no carrier or WhatsApp sync;
 the rep decides what is relevant and shares it. From the phone: share the text (or a screenshot)
-to Slack → the **Ecolens CRM** bot DM → send. The bot replies with the deal it most likely belongs
+to Slack → the **#crm-texts** channel (any channel the bot has been invited to; Slack's mobile
+share picker cannot target app DMs, so a channel is the destination) → send. Pasting into the bot's
+DM works too. The bot replies in a thread under the share with the deal it most likely belongs
 to as buttons (a company or contact named in the text wins, otherwise the rep's most recently
 touched open deals, own deals only) plus a dropdown of all their open deals and **Not a deal**.
 One tap creates a `text` activity on the deal (source `slack`, screenshot stored in `attachments`
@@ -123,7 +125,8 @@ and shown on the timeline), bumps the deal's last-activity date and writes an au
 then offers **Add follow-up** (a modal that creates a to-do on the same deal), **Change deal** and
 **Open in CRM**. Messages never attached to a deal wait in Settings → *Text messages from Slack*.
 
-Mechanics: `message.im` events arrive at `/api/slack/webhooks/events` (signed; `url_verification`
+Only the person who shared the text (or an admin) can use its buttons. Mechanics: `message.im`,
+`message.channels` and `message.groups` events arrive at `/api/slack/webhooks/events` (signed; `url_verification`
 is answered unsigned, as Slack requires). The event is stored in `slack_inbox` keyed by Slack's
 `event_id`, so Slack's retries are no-ops, and the work is done before the 200 is sent because
 Cloud Run gives no CPU after the response. Screenshots are downloaded with the bot token at log

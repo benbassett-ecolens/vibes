@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { confirmBlocks, dismissedBlocks, pickerBlocks, type Candidate, type InboxRow } from './textlog.js'
 
 const row: InboxRow = {
-  id: 'inbox-1', event_id: 'Ev1', user_id: 'u1', slack_user_id: 'U1', channel: 'D1', ts: '1.1', card_ts: null,
+  id: 'inbox-1', event_id: 'Ev1', user_id: 'u1', slack_user_id: 'U1', channel: 'D1', ts: '1.1', thread_ts: null, card_ts: null,
   text: 'Hey Ben, Rockton can do Friday for the demo', files: [], status: 'pending', activity_id: null, created_at: new Date().toISOString(),
 }
 const cands: Candidate[] = [

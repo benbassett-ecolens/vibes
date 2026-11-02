@@ -63,13 +63,13 @@ export async function slackUserIdFor(userId: string, strict = false): Promise<st
 }
 
 /** Slack user id -> CRM user (by cached id, else by the Slack profile email). */
-export async function crmUserForSlack(slackUserId: string): Promise<{ id: string; name: string; email: string } | null> {
-  const cached = await one<{ id: string; name: string; email: string }>('SELECT id, name, email FROM users WHERE slack_user_id = $1 AND is_active', [slackUserId])
+export async function crmUserForSlack(slackUserId: string): Promise<{ id: string; name: string; email: string; role: string } | null> {
+  const cached = await one<{ id: string; name: string; email: string; role: string }>('SELECT id, name, email, role FROM users WHERE slack_user_id = $1 AND is_active', [slackUserId])
   if (cached) return cached
   const info = await slackCall<{ user: { profile?: { email?: string } } }>('users.info', { user: slackUserId })
   const email = info.user.profile?.email?.toLowerCase()
   if (!email || !email.endsWith(`@${config.allowedDomain}`)) return null
-  const u = await one<{ id: string; name: string; email: string }>('SELECT id, name, email FROM users WHERE email = $1 AND is_active', [email])
+  const u = await one<{ id: string; name: string; email: string; role: string }>('SELECT id, name, email, role FROM users WHERE email = $1 AND is_active', [email])
   if (u) await query('UPDATE users SET slack_user_id = $2 WHERE id = $1', [u.id, slackUserId])
   return u
 }

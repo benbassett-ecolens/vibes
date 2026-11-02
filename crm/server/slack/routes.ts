@@ -83,6 +83,12 @@ slackWebhookRouter.post(
     // (each branch is one or two Slack calls, well inside Slack's 3s window). Errors are logged, never retried.
     if (action.action_id.startsWith('log_')) {
       try {
+        const owner = await loadInbox(value.split(':')[0])
+        if (owner && owner.user_id !== actor.id && actor.role !== 'admin') {
+          await slackCall('chat.postEphemeral', { channel: owner.channel, user: payload.user.id, thread_ts: owner.thread_ts ?? undefined, text: 'Only the person who shared this text can attach it to a deal.' }).catch(() => undefined)
+          res.status(200).end()
+          return
+        }
         if (action.action_id.startsWith('log_pick') || action.action_id === 'log_select') {
           const [inboxId, dealId] = value.split(':')
           await logInbox(inboxId, dealId, actor)
@@ -131,7 +137,7 @@ slackWebhookRouter.post(
       type: string
       challenge?: string
       event_id?: string
-      event?: { type: string; subtype?: string; channel_type?: string; channel: string; user?: string; bot_id?: string; ts: string; text?: string; files?: Array<{ id: string; name?: string; mimetype?: string; url_private?: string; size?: number }> }
+      event?: { type: string; subtype?: string; channel_type?: string; channel: string; user?: string; bot_id?: string; ts: string; thread_ts?: string; text?: string; files?: Array<{ id: string; name?: string; mimetype?: string; url_private?: string; size?: number }> }
     }
     if (body.type === 'url_verification') {
       // Slack sends this once when the Request URL is saved in the app config; it is unsigned on purpose.
@@ -141,24 +147,28 @@ slackWebhookRouter.post(
     guard(req as RawReq)
     res.setHeader('X-Slack-No-Retry', '1')
     const ev = body.event
-    if (body.type !== 'event_callback' || !ev || ev.type !== 'message' || ev.channel_type !== 'im' || ev.bot_id || !ev.user) {
+    // DMs to the bot, or a channel the bot was invited to (reps share from their phone's share
+    // sheet into #crm-texts, since Slack's mobile share picker does not list app DMs).
+    const inChannel = ev?.channel_type === 'channel' || ev?.channel_type === 'group'
+    if (body.type !== 'event_callback' || !ev || ev.type !== 'message' || !(ev.channel_type === 'im' || inChannel) || ev.bot_id || !ev.user) {
       res.status(200).end()
       return
     }
-    if (ev.subtype && ev.subtype !== 'file_share') {
-      res.status(200).end() // edits, deletions, joins…
+    if ((ev.subtype && ev.subtype !== 'file_share') || (ev.thread_ts && ev.thread_ts !== ev.ts)) {
+      res.status(200).end() // edits, deletions, joins, and replies inside a thread
       return
     }
+    const threadTs = inChannel ? ev.ts : null
     const actor = await crmUserForSlack(ev.user)
     if (!actor) {
-      await slackCall('chat.postMessage', { channel: ev.channel, text: `I couldn't match your Slack account to a CRM user. Sign in at ${config.appBaseUrl} once with your @${config.allowedDomain} account, then try again.` }).catch(() => undefined)
+      await slackCall('chat.postMessage', { channel: ev.channel, thread_ts: threadTs, text: `<@${ev.user}> I couldn't match your Slack account to a CRM user. Sign in at ${config.appBaseUrl} once with your @${config.allowedDomain} account, then try again.` }).catch(() => undefined)
       res.status(200).end()
       return
     }
     const files: InboxFile[] = (ev.files ?? []).map((f) => ({ id: f.id, name: f.name ?? 'file', mimetype: f.mimetype ?? 'application/octet-stream', url_private: f.url_private ?? '', size: f.size ?? 0 }))
     try {
-      const row = await receiveDm({ eventId: body.event_id ?? null, userId: actor.id, slackUserId: ev.user, channel: ev.channel, ts: ev.ts, text: ev.text ?? '', files })
-      if (row) console.log(`slack textlog: received ${row.id} from ${actor.email} (${files.length} file(s))`)
+      const row = await receiveDm({ eventId: body.event_id ?? null, userId: actor.id, slackUserId: ev.user, channel: ev.channel, ts: ev.ts, threadTs, text: ev.text ?? '', files })
+      if (row) console.log(`slack textlog: received ${row.id} from ${actor.email} in ${ev.channel_type} (${files.length} file(s))`)
     } catch (e) {
       console.warn('slack textlog receive:', (e as Error).message)
     }
