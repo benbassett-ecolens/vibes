@@ -154,6 +154,17 @@ dealsRouter.get(
 )
 
 /** Kanban payload: every non-archived deal in a pipeline, ordered for columns. */
+/** Distinct lead sources with counts (for filters). */
+dealsRouter.get(
+  '/lead-sources',
+  wrap(async (_req, res) => {
+    const items = await query<{ value: string; n: number }>(
+      `SELECT lead_source AS value, COUNT(*)::int AS n FROM deals WHERE archived_at IS NULL AND lead_source IS NOT NULL AND lead_source <> '' GROUP BY 1 ORDER BY n DESC, 1`,
+    )
+    res.json({ items })
+  }),
+)
+
 dealsRouter.get(
   '/board',
   wrap(async (req, res) => {

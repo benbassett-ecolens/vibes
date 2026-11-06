@@ -347,11 +347,80 @@ export interface TimelineItem {
 
 // ---- Reports ----
 
+export type ReportBasis = 'closed' | 'created' | 'expected'
+
 export interface ReportFilters {
   pipeline_id?: string
   owner_id?: string
   from?: string // ISO date, inclusive
   to?: string // ISO date, inclusive
+  basis?: ReportBasis // which date puts a deal "in range": closed_at (default), created_at or expected_close_date
+  deal_type?: DealType
+  lead_source?: string
+  product_id?: string
+  ecosystem?: string
+  partner_type?: string
+  stage_id?: string
+}
+
+export interface CycleSplitRow {
+  key: string
+  label: string
+  won_n: number
+  won_median_days: number | null
+  won_avg_days: number | null
+  lost_n: number
+  lost_median_days: number | null
+}
+
+export interface CycleReport {
+  won_n: number
+  won_median_days: number | null
+  won_avg_days: number | null
+  won_p25_days: number | null
+  won_p75_days: number | null
+  lost_n: number
+  lost_median_days: number | null
+  histogram: { bucket: string; won: number; lost: number }[]
+  by: { deal_type: CycleSplitRow[]; owner: CycleSplitRow[]; lead_source: CycleSplitRow[]; ecosystem: CycleSplitRow[] }
+}
+
+export interface StageDurationRow {
+  stage_id: string
+  stage_name: string
+  position: number
+  color: string
+  won_n: number
+  won_avg_days: number | null
+  won_median_days: number | null
+  lost_n: number
+  lost_avg_days: number | null
+  lost_median_days: number | null
+}
+
+export interface RenewalReport {
+  due: { window: '30' | '60' | '90' | 'overdue'; deal_count: number; total_amount: number }[]
+  won_n: number
+  won_value: number
+  lost_n: number
+  lost_value: number
+  win_rate: number | null
+  prior_value: number // first-year value of the contracts the won renewals replaced
+  uplift: number | null // won_value / prior_value - 1
+  unrenewed_ending_90: number // won contracts ending within 90 days with no renewal deal yet
+  upcoming: Deal[]
+}
+
+export interface LeadSourceRow {
+  lead_source: string
+  created_n: number
+  open_n: number
+  open_value: number
+  won_n: number
+  won_value: number
+  lost_n: number
+  win_rate: number | null
+  median_cycle_days: number | null
 }
 
 export interface PipelineByStageRow {
@@ -391,4 +460,8 @@ export interface ReportSummary {
   activity_overdue_deals: Deal[]
   by_product: { product_id: string; product_name: string; pricing_type: PricingType; open_deals: number; open_amount: number; won_deals: number; won_amount: number }[]
   stale_deals: Deal[]
+  cycle: CycleReport
+  stage_durations: StageDurationRow[]
+  renewals: RenewalReport
+  lead_sources: LeadSourceRow[]
 }

@@ -2,7 +2,8 @@ import { Router } from 'express'
 import { one, query } from '../db.js'
 import { badRequest, wrap } from '../http.js'
 import { DEAL_SELECT, FLAG_SQL } from './deals.js'
-import type { Deal, ReportSummary } from '../../shared/types.js'
+import type { CycleSplitRow, Deal, ReportBasis, ReportSummary } from '../../shared/types.js'
+import { DEAL_TYPE_LABEL } from '../../shared/pricing.js'
 
 export const reportsRouter = Router()
 
@@ -11,21 +12,40 @@ interface Filters {
   ownerId: string | null
   from: string // ISO date
   to: string // ISO date (inclusive)
+  basis: ReportBasis
+  dealType: string | null
+  leadSource: string | null
+  productId: string | null
+  ecosystem: string | null
+  partnerType: string | null
+  stageId: string | null
 }
 
-function readFilters(q: Record<string, unknown>): Filters {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const str = (v: unknown, max = 120): string | null => (typeof v === 'string' && v.trim() && v.length <= max ? v.trim() : null)
+const uuid = (v: unknown): string | null => (typeof v === 'string' && UUID.test(v) ? v : null)
+
+export function readFilters(q: Record<string, unknown>, today = new Date()): Filters {
   const iso = /^\d{4}-\d{2}-\d{2}$/
-  const today = new Date()
   const defFrom = new Date(today.getFullYear(), today.getMonth() - 5, 1)
   const toIso = (d: Date) => d.toISOString().slice(0, 10)
   const from = typeof q.from === 'string' && iso.test(q.from) ? q.from : toIso(defFrom)
   const to = typeof q.to === 'string' && iso.test(q.to) ? q.to : toIso(today)
   if (from > to) throw badRequest('from must be on or before to')
+  const basis = q.basis === 'created' || q.basis === 'expected' ? q.basis : 'closed'
+  const dealType = ['new_business', 'renewal', 'upsell'].includes(String(q.deal_type)) ? String(q.deal_type) : null
   return {
-    pipelineId: typeof q.pipeline_id === 'string' && q.pipeline_id ? q.pipeline_id : null,
-    ownerId: typeof q.owner_id === 'string' && q.owner_id ? q.owner_id : null,
+    pipelineId: uuid(q.pipeline_id),
+    ownerId: uuid(q.owner_id),
     from,
     to,
+    basis,
+    dealType,
+    leadSource: str(q.lead_source),
+    productId: uuid(q.product_id),
+    ecosystem: str(q.ecosystem),
+    partnerType: str(q.partner_type),
+    stageId: uuid(q.stage_id),
   }
 }
 
@@ -40,20 +60,49 @@ export function salesVelocityPerDay(openDeals: number, rate: number | null, avgD
   return (openDeals * rate * avgDealSize) / avgCycleDays
 }
 
+export function uplift(wonValue: number, priorValue: number): number | null {
+  return priorValue > 0 ? wonValue / priorValue - 1 : null
+}
+
+/** The column that decides whether a deal is "in range". */
+export function rangeColumn(basis: ReportBasis): string {
+  return basis === 'created' ? 'd.created_at' : basis === 'expected' ? 'd.expected_close_date' : 'd.closed_at'
+}
+
+const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v))
+const CYCLE_BUCKETS = ['0–14', '15–30', '31–60', '61–90', '91–180', '180+']
+
 reportsRouter.get(
   '/summary',
   wrap(async (req, res) => {
     const f = readFilters(req.query as Record<string, unknown>)
-    // $1 pipeline (nullable), $2 owner (nullable), $3 from, $4 to-exclusive
-    const params = [f.pipelineId, f.ownerId, f.from, f.to]
-    const scopeParams = [f.pipelineId, f.ownerId] // for queries that use only $1/$2
-    const scope = `d.archived_at IS NULL AND ($1::uuid IS NULL OR d.pipeline_id = $1) AND ($2::uuid IS NULL OR d.owner_id = $2)`
-    const inRange = `d.closed_at >= $3::date AND d.closed_at < ($4::date + interval '1 day')`
+    // One parameter list for every query. Postgres rejects a bind with more parameters than the
+    // statement references, so GUARD references all of them (planner folds it away).
+    //  $1 pipeline  $2 owner  $3 from  $4 to  $5 deal_type  $6 lead_source  $7 product
+    //  $8 ecosystem  $9 partner_type  $10 stage  $11 basis
+    const params = [f.pipelineId, f.ownerId, f.from, f.to, f.dealType, f.leadSource, f.productId, f.ecosystem, f.partnerType, f.stageId, f.basis]
+    const GUARD = `($1::uuid IS NULL OR TRUE) AND ($2::uuid IS NULL OR TRUE) AND ($3::date IS NULL OR TRUE) AND ($4::date IS NULL OR TRUE)
+      AND ($5::text IS NULL OR TRUE) AND ($6::text IS NULL OR TRUE) AND ($7::uuid IS NULL OR TRUE) AND ($8::text IS NULL OR TRUE)
+      AND ($9::text IS NULL OR TRUE) AND ($10::uuid IS NULL OR TRUE) AND ($11::text IS NULL OR TRUE)`
+    // Deal-level filters, on alias d.
+    const dealFilter = `($5::text IS NULL OR d.deal_type = $5)
+      AND ($6::text IS NULL OR lower(d.lead_source) = lower($6))
+      AND ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM deal_products dpf WHERE dpf.deal_id = d.id AND dpf.product_id = $7))
+      AND ($8::text IS NULL OR EXISTS (SELECT 1 FROM companies cf WHERE cf.id = d.company_id AND $8 = ANY (cf.ecosystems)))
+      AND ($9::text IS NULL OR EXISTS (SELECT 1 FROM companies cf WHERE cf.id = d.company_id AND cf.partner_type = $9))
+      AND ($10::uuid IS NULL OR d.stage_id = $10)`
+    const noDealFilter = `($5::text IS NULL AND $6::text IS NULL AND $7::uuid IS NULL AND $8::text IS NULL AND $9::text IS NULL AND $10::uuid IS NULL)`
+    const scope = `d.archived_at IS NULL AND ($1::uuid IS NULL OR d.pipeline_id = $1) AND ($2::uuid IS NULL OR d.owner_id = $2) AND ${dealFilter} AND ${GUARD}`
+    const col = rangeColumn(f.basis)
+    const inRange = `${col} >= $3::date AND ${col} < ($4::date + interval '1 day')`
+    // With the "expected close" basis the open pipeline is also limited to the window (that is the forecast).
+    const openScope = f.basis === 'expected' ? `${scope} AND ${inRange}` : scope
+    const defaultPipeline = `(SELECT id FROM pipelines ORDER BY is_default DESC, position LIMIT 1)`
 
     const open = (await one<{ n: number; value: number; weighted: number }>(
       `SELECT COUNT(*)::int AS n, COALESCE(SUM(d.amount), 0) AS value, COALESCE(SUM(d.amount * s.probability / 100.0), 0) AS weighted
-       FROM deals d JOIN stages s ON s.id = d.stage_id WHERE ${scope} AND s.kind = 'open'`,
-      scopeParams,
+       FROM deals d JOIN stages s ON s.id = d.stage_id WHERE ${openScope} AND s.kind = 'open'`,
+      params,
     ))!
 
     const closed = (await one<{ won_n: number; won_v: number; lost_n: number; lost_v: number; avg_cycle: number | null }>(
@@ -74,23 +123,22 @@ reportsRouter.get(
          COALESCE(SUM(d.amount * s.probability / 100.0), 0) AS weighted_amount,
          AVG(EXTRACT(EPOCH FROM (now() - d.stage_entered_at)) / 86400.0) AS avg_days_in_stage
        FROM stages s
-       LEFT JOIN deals d ON d.stage_id = s.id AND d.archived_at IS NULL AND ($2::uuid IS NULL OR d.owner_id = $2)
-         AND (s.kind = 'open' OR (d.closed_at >= $3::date AND d.closed_at < ($4::date + interval '1 day')))
-       WHERE ($1::uuid IS NULL OR s.pipeline_id = $1)
-         AND ($1::uuid IS NOT NULL OR s.pipeline_id = (SELECT id FROM pipelines ORDER BY is_default DESC, position LIMIT 1))
+       LEFT JOIN deals d ON d.stage_id = s.id AND d.archived_at IS NULL AND ($2::uuid IS NULL OR d.owner_id = $2) AND ${dealFilter}
+         AND ((s.kind = 'open' AND ${f.basis === 'expected' ? inRange : 'TRUE'}) OR (s.kind <> 'open' AND ${inRange}))
+       WHERE s.pipeline_id = COALESCE($1::uuid, ${defaultPipeline}) AND ${GUARD}
        GROUP BY s.id ORDER BY s.position`,
       params,
     )
 
     const byForecast = await query<ReportSummary['by_forecast'][number]>(
       `SELECT s.forecast_category AS category, COUNT(d.id)::int AS deal_count, COALESCE(SUM(d.amount), 0) AS total_amount
-       FROM deals d JOIN stages s ON s.id = d.stage_id WHERE ${scope} AND s.kind = 'open'
+       FROM deals d JOIN stages s ON s.id = d.stage_id WHERE ${openScope} AND s.kind = 'open'
        GROUP BY s.forecast_category ORDER BY array_position(ARRAY['commit','best_case','pipeline','closed','omitted'], s.forecast_category)`,
-      scopeParams,
+      params,
     )
 
     const wonByMonth = await query<ReportSummary['won_by_month'][number]>(
-      `SELECT to_char(date_trunc('month', d.closed_at), 'YYYY-MM') AS month,
+      `SELECT to_char(date_trunc('month', ${col}), 'YYYY-MM') AS month,
          COUNT(*) FILTER (WHERE s.kind = 'won')::int AS won_count,
          COALESCE(SUM(d.amount) FILTER (WHERE s.kind = 'won'), 0) AS won_amount,
          COUNT(*) FILTER (WHERE s.kind = 'lost')::int AS lost_count,
@@ -102,16 +150,16 @@ reportsRouter.get(
 
     const byOwner = await query<ReportSummary['by_owner'][number]>(
       `SELECT u.id AS owner_id, u.name AS owner_name,
-         COUNT(d.id) FILTER (WHERE s.kind = 'open')::int AS open_count,
-         COALESCE(SUM(d.amount) FILTER (WHERE s.kind = 'open'), 0) AS open_value,
+         COUNT(d.id) FILTER (WHERE s.kind = 'open' AND ${f.basis === 'expected' ? inRange : 'TRUE'})::int AS open_count,
+         COALESCE(SUM(d.amount) FILTER (WHERE s.kind = 'open' AND ${f.basis === 'expected' ? inRange : 'TRUE'}), 0) AS open_value,
          COUNT(d.id) FILTER (WHERE s.kind = 'won' AND ${inRange})::int AS won_count,
          COALESCE(SUM(d.amount) FILTER (WHERE s.kind = 'won' AND ${inRange}), 0) AS won_value,
          COUNT(d.id) FILTER (WHERE s.kind = 'lost' AND ${inRange})::int AS lost_count,
          (SELECT COUNT(*)::int FROM activities a WHERE a.created_by = u.id AND a.created_at >= $3::date AND a.created_at < ($4::date + interval '1 day')) AS activities
        FROM users u
-       LEFT JOIN deals d ON d.owner_id = u.id AND d.archived_at IS NULL AND ($1::uuid IS NULL OR d.pipeline_id = $1)
+       LEFT JOIN deals d ON d.owner_id = u.id AND d.archived_at IS NULL AND ($1::uuid IS NULL OR d.pipeline_id = $1) AND ${dealFilter}
        LEFT JOIN stages s ON s.id = d.stage_id
-       WHERE u.is_active AND ($2::uuid IS NULL OR u.id = $2)
+       WHERE u.is_active AND ($2::uuid IS NULL OR u.id = $2) AND ${GUARD}
        GROUP BY u.id ORDER BY won_value DESC, open_value DESC, u.name`,
       params,
     )
@@ -131,7 +179,7 @@ reportsRouter.get(
           WHERE hs.pipeline_id = s.pipeline_id AND hs.position >= s.position AND ${scope}
             AND d.created_at >= $3::date AND d.created_at < ($4::date + interval '1 day')) AS reached
        FROM stages s
-       WHERE s.kind = 'open' AND s.pipeline_id = COALESCE($1::uuid, (SELECT id FROM pipelines ORDER BY is_default DESC, position LIMIT 1))
+       WHERE s.kind = 'open' AND s.pipeline_id = COALESCE($1::uuid, ${defaultPipeline})
        ORDER BY s.position`,
       params,
     )
@@ -142,14 +190,15 @@ reportsRouter.get(
        WHERE a.created_at >= $3::date AND a.created_at < ($4::date + interval '1 day')
          AND ($2::uuid IS NULL OR a.created_by = $2)
          AND ($1::uuid IS NULL OR d.pipeline_id = $1)
+         AND (${noDealFilter} OR (d.id IS NOT NULL AND ${dealFilter})) AND ${GUARD}
        GROUP BY a.type ORDER BY count DESC`,
       params,
     )
 
     const byProduct = await query<ReportSummary['by_product'][number]>(
       `SELECT p.id AS product_id, p.name AS product_name, p.pricing_type,
-         COUNT(DISTINCT d.id) FILTER (WHERE s.kind = 'open')::int AS open_deals,
-         COALESCE(SUM(CASE WHEN s.kind = 'open' THEN
+         COUNT(DISTINCT d.id) FILTER (WHERE s.kind = 'open' AND ${f.basis === 'expected' ? inRange : 'TRUE'})::int AS open_deals,
+         COALESCE(SUM(CASE WHEN s.kind = 'open' AND ${f.basis === 'expected' ? inRange : 'TRUE'} THEN
            CASE dp.pricing_type WHEN 'percent' THEN dp.basis_amount * dp.unit_price / 100 WHEN 'monthly' THEN dp.quantity * dp.unit_price * dp.term_months ELSE dp.quantity * dp.unit_price END END), 0) AS open_amount,
          COUNT(DISTINCT d.id) FILTER (WHERE s.kind = 'won' AND ${inRange})::int AS won_deals,
          COALESCE(SUM(CASE WHEN s.kind = 'won' AND ${inRange} THEN
@@ -164,22 +213,131 @@ reportsRouter.get(
 
     const byDealType = await query<ReportSummary['by_deal_type'][number]>(
       `SELECT d.deal_type,
-         COUNT(*) FILTER (WHERE s.kind = 'open')::int AS open_count,
-         COALESCE(SUM(d.amount) FILTER (WHERE s.kind = 'open'), 0) AS open_value,
+         COUNT(*) FILTER (WHERE s.kind = 'open' AND ${f.basis === 'expected' ? inRange : 'TRUE'})::int AS open_count,
+         COALESCE(SUM(d.amount) FILTER (WHERE s.kind = 'open' AND ${f.basis === 'expected' ? inRange : 'TRUE'}), 0) AS open_value,
          COUNT(*) FILTER (WHERE s.kind = 'won' AND ${inRange})::int AS won_count,
          COALESCE(SUM(d.amount) FILTER (WHERE s.kind = 'won' AND ${inRange}), 0) AS won_value
        FROM deals d JOIN stages s ON s.id = d.stage_id WHERE ${scope}
        GROUP BY d.deal_type ORDER BY array_position(ARRAY['new_business','renewal','upsell'], d.deal_type)`,
       params,
     )
-    const closeOverdue = await query<Deal>(`${DEAL_SELECT} WHERE ${scope} AND ${FLAG_SQL.close_overdue} ORDER BY d.expected_close_date ASC LIMIT 50`, scopeParams)
-    const activityOverdue = await query<Deal>(`${DEAL_SELECT} WHERE ${scope} AND ${FLAG_SQL.activity_overdue} ORDER BY next_activity_at ASC LIMIT 50`, scopeParams)
+    const closeOverdue = await query<Deal>(`${DEAL_SELECT} WHERE ${scope} AND ${FLAG_SQL.close_overdue} ORDER BY d.expected_close_date ASC LIMIT 50`, params)
+    const activityOverdue = await query<Deal>(`${DEAL_SELECT} WHERE ${scope} AND ${FLAG_SQL.activity_overdue} ORDER BY next_activity_at ASC LIMIT 50`, params)
 
     const stale = await query<Deal>(
       `${DEAL_SELECT} WHERE ${scope} AND s.kind = 'open' AND s.rot_after_days IS NOT NULL
          AND COALESCE(d.last_activity_at, d.stage_entered_at) < now() - (s.rot_after_days || ' days')::interval
        ORDER BY COALESCE(d.last_activity_at, d.stage_entered_at) ASC LIMIT 50`,
-      scopeParams,
+      params,
+    )
+
+    // ---- Sales cycle: created → closed, for deals closed in range (by basis). ----
+    const cycleCte = `WITH c AS (
+      SELECT d.id, d.deal_type, COALESCE(NULLIF(d.lead_source, ''), 'Not recorded') AS lead_source, d.owner_id, COALESCE(u.name, 'Unassigned') AS owner_name,
+        co.ecosystems, s.kind, EXTRACT(EPOCH FROM (d.closed_at - d.created_at)) / 86400.0 AS days
+      FROM deals d JOIN stages s ON s.id = d.stage_id LEFT JOIN users u ON u.id = d.owner_id LEFT JOIN companies co ON co.id = d.company_id
+      WHERE ${scope} AND s.kind <> 'open' AND ${inRange} AND d.closed_at IS NOT NULL AND d.closed_at > d.created_at + interval '1 minute')`
+    const cycleTotals = (await one<{ won_n: number; won_med: number | null; won_avg: number | null; won_p25: number | null; won_p75: number | null; lost_n: number; lost_med: number | null }>(
+      `${cycleCte} SELECT
+         COUNT(*) FILTER (WHERE kind = 'won')::int AS won_n,
+         percentile_cont(0.5) WITHIN GROUP (ORDER BY days) FILTER (WHERE kind = 'won') AS won_med,
+         AVG(days) FILTER (WHERE kind = 'won') AS won_avg,
+         percentile_cont(0.25) WITHIN GROUP (ORDER BY days) FILTER (WHERE kind = 'won') AS won_p25,
+         percentile_cont(0.75) WITHIN GROUP (ORDER BY days) FILTER (WHERE kind = 'won') AS won_p75,
+         COUNT(*) FILTER (WHERE kind = 'lost')::int AS lost_n,
+         percentile_cont(0.5) WITHIN GROUP (ORDER BY days) FILTER (WHERE kind = 'lost') AS lost_med
+       FROM c`,
+      params,
+    ))!
+    const histRows = await query<{ b: number; won: number; lost: number }>(
+      `${cycleCte} SELECT width_bucket(days, ARRAY[15, 31, 61, 91, 181]) AS b,
+         COUNT(*) FILTER (WHERE kind = 'won')::int AS won, COUNT(*) FILTER (WHERE kind = 'lost')::int AS lost
+       FROM c GROUP BY 1`,
+      params,
+    )
+    const histogram = CYCLE_BUCKETS.map((bucket, i) => {
+      const r = histRows.find((x) => Number(x.b) === i)
+      return { bucket, won: r?.won ?? 0, lost: r?.lost ?? 0 }
+    })
+    const splitSql = (keyExpr: string, labelExpr: string, from = 'c') => `${cycleCte} SELECT ${keyExpr} AS key, ${labelExpr} AS label,
+         COUNT(*) FILTER (WHERE kind = 'won')::int AS won_n,
+         percentile_cont(0.5) WITHIN GROUP (ORDER BY days) FILTER (WHERE kind = 'won') AS won_median_days,
+         AVG(days) FILTER (WHERE kind = 'won') AS won_avg_days,
+         COUNT(*) FILTER (WHERE kind = 'lost')::int AS lost_n,
+         percentile_cont(0.5) WITHIN GROUP (ORDER BY days) FILTER (WHERE kind = 'lost') AS lost_median_days
+       FROM ${from} GROUP BY 1, 2 ORDER BY won_n DESC, lost_n DESC, 2`
+    const fixSplit = (rows: CycleSplitRow[]): CycleSplitRow[] => rows.map((r) => ({ ...r, won_median_days: num(r.won_median_days), won_avg_days: num(r.won_avg_days), lost_median_days: num(r.lost_median_days) }))
+    const byType = fixSplit(await query<CycleSplitRow>(splitSql('deal_type', 'deal_type'), params)).map((r) => ({ ...r, label: DEAL_TYPE_LABEL[r.key as keyof typeof DEAL_TYPE_LABEL] ?? r.key }))
+    const byOwnerCycle = fixSplit(await query<CycleSplitRow>(splitSql("COALESCE(owner_id::text, '')", 'owner_name'), params))
+    const bySource = fixSplit(await query<CycleSplitRow>(splitSql('lead_source', 'lead_source'), params))
+    const byEco = fixSplit(await query<CycleSplitRow>(splitSql('e', 'e', `(SELECT c.*, COALESCE(x.e, 'No ecosystem') AS e FROM c LEFT JOIN LATERAL unnest(c.ecosystems) AS x(e) ON TRUE) c2`), params))
+
+    // ---- Time in each stage, won vs lost, for deals closed in range. ----
+    const stageDurations = await query<ReportSummary['stage_durations'][number]>(
+      `SELECT s.id AS stage_id, s.name AS stage_name, s.position, s.color,
+         COUNT(DISTINCT h.deal_id) FILTER (WHERE ds.kind = 'won')::int AS won_n,
+         AVG(h.days) FILTER (WHERE ds.kind = 'won') AS won_avg_days,
+         percentile_cont(0.5) WITHIN GROUP (ORDER BY h.days) FILTER (WHERE ds.kind = 'won') AS won_median_days,
+         COUNT(DISTINCT h.deal_id) FILTER (WHERE ds.kind = 'lost')::int AS lost_n,
+         AVG(h.days) FILTER (WHERE ds.kind = 'lost') AS lost_avg_days,
+         percentile_cont(0.5) WITHIN GROUP (ORDER BY h.days) FILTER (WHERE ds.kind = 'lost') AS lost_median_days
+       FROM stages s
+       LEFT JOIN (
+         SELECT h.deal_id, h.to_stage_id, EXTRACT(EPOCH FROM (COALESCE(h.exited_at, d.closed_at, now()) - h.entered_at)) / 86400.0 AS days
+         FROM deal_stage_history h JOIN deals d ON d.id = h.deal_id JOIN stages s2 ON s2.id = d.stage_id
+         WHERE ${scope} AND s2.kind <> 'open' AND ${inRange}
+       ) h ON h.to_stage_id = s.id
+       LEFT JOIN deals dd ON dd.id = h.deal_id
+       LEFT JOIN stages ds ON ds.id = dd.stage_id
+       WHERE s.kind = 'open' AND s.pipeline_id = COALESCE($1::uuid, ${defaultPipeline})
+       GROUP BY s.id ORDER BY s.position`,
+      params,
+    )
+
+    // ---- Renewals ----
+    const due = await query<ReportSummary['renewals']['due'][number]>(
+      `SELECT w.win AS window, COUNT(d.id)::int AS deal_count, COALESCE(SUM(d.amount), 0) AS total_amount
+       FROM (VALUES ('overdue', -100000, -1), ('30', 0, 30), ('60', 0, 60), ('90', 0, 90)) AS w(win, lo, hi)
+       LEFT JOIN deals d ON d.deal_type = 'renewal' AND d.expected_close_date IS NOT NULL
+         AND d.expected_close_date - current_date BETWEEN w.lo AND w.hi AND ${scope}
+         AND EXISTS (SELECT 1 FROM stages s WHERE s.id = d.stage_id AND s.kind = 'open')
+       GROUP BY w.win, w.hi ORDER BY w.hi`,
+      params,
+    )
+    const renewalClosed = (await one<{ won_n: number; won_v: number; lost_n: number; lost_v: number; prior_v: number }>(
+      `SELECT COUNT(*) FILTER (WHERE s.kind = 'won')::int AS won_n,
+         COALESCE(SUM(d.amount) FILTER (WHERE s.kind = 'won'), 0) AS won_v,
+         COUNT(*) FILTER (WHERE s.kind = 'lost')::int AS lost_n,
+         COALESCE(SUM(d.amount) FILTER (WHERE s.kind = 'lost'), 0) AS lost_v,
+         COALESCE(SUM(p.amount) FILTER (WHERE s.kind = 'won' AND p.id IS NOT NULL), 0) AS prior_v
+       FROM deals d JOIN stages s ON s.id = d.stage_id LEFT JOIN deals p ON p.id = d.renewal_of_deal_id
+       WHERE ${scope} AND d.deal_type = 'renewal' AND s.kind <> 'open' AND ${inRange}`,
+      params,
+    ))!
+    const unrenewed = (await one<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM deals d JOIN stages s ON s.id = d.stage_id
+       WHERE ${scope} AND s.kind = 'won' AND d.renewal_created_at IS NULL AND d.contract_months IS NOT NULL AND d.contract_start_date IS NOT NULL
+         AND (d.contract_start_date + (d.contract_months || ' months')::interval)::date BETWEEN current_date AND current_date + 90`,
+      params,
+    ))!
+    const upcoming = await query<Deal>(
+      `${DEAL_SELECT} WHERE ${scope} AND d.deal_type = 'renewal' AND s.kind = 'open' ORDER BY d.expected_close_date ASC NULLS LAST LIMIT 25`,
+      params,
+    )
+
+    // ---- Lead sources ----
+    const leadSources = await query<ReportSummary['lead_sources'][number]>(
+      `SELECT COALESCE(NULLIF(d.lead_source, ''), 'Not recorded') AS lead_source,
+         COUNT(*) FILTER (WHERE d.created_at >= $3::date AND d.created_at < ($4::date + interval '1 day'))::int AS created_n,
+         COUNT(*) FILTER (WHERE s.kind = 'open' AND ${f.basis === 'expected' ? inRange : 'TRUE'})::int AS open_n,
+         COALESCE(SUM(d.amount) FILTER (WHERE s.kind = 'open' AND ${f.basis === 'expected' ? inRange : 'TRUE'}), 0) AS open_value,
+         COUNT(*) FILTER (WHERE s.kind = 'won' AND ${inRange})::int AS won_n,
+         COALESCE(SUM(d.amount) FILTER (WHERE s.kind = 'won' AND ${inRange}), 0) AS won_value,
+         COUNT(*) FILTER (WHERE s.kind = 'lost' AND ${inRange})::int AS lost_n,
+         percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (d.closed_at - d.created_at)) / 86400.0) FILTER (WHERE s.kind = 'won' AND ${inRange}) AS median_cycle_days
+       FROM deals d JOIN stages s ON s.id = d.stage_id WHERE ${scope}
+       GROUP BY 1 ORDER BY won_value DESC, created_n DESC, 1`,
+      params,
     )
 
     const rate = winRate(closed.won_n, closed.lost_n)
@@ -210,6 +368,31 @@ reportsRouter.get(
       close_overdue_deals: closeOverdue,
       activity_overdue_deals: activityOverdue,
       stale_deals: stale,
+      cycle: {
+        won_n: cycleTotals.won_n,
+        won_median_days: num(cycleTotals.won_med),
+        won_avg_days: num(cycleTotals.won_avg),
+        won_p25_days: num(cycleTotals.won_p25),
+        won_p75_days: num(cycleTotals.won_p75),
+        lost_n: cycleTotals.lost_n,
+        lost_median_days: num(cycleTotals.lost_med),
+        histogram,
+        by: { deal_type: byType, owner: byOwnerCycle, lead_source: bySource, ecosystem: byEco },
+      },
+      stage_durations: stageDurations.map((r) => ({ ...r, won_avg_days: num(r.won_avg_days), won_median_days: num(r.won_median_days), lost_avg_days: num(r.lost_avg_days), lost_median_days: num(r.lost_median_days) })),
+      renewals: {
+        due: due.map((r) => ({ ...r, total_amount: Number(r.total_amount) })),
+        won_n: renewalClosed.won_n,
+        won_value: Number(renewalClosed.won_v),
+        lost_n: renewalClosed.lost_n,
+        lost_value: Number(renewalClosed.lost_v),
+        win_rate: winRate(renewalClosed.won_n, renewalClosed.lost_n),
+        prior_value: Number(renewalClosed.prior_v),
+        uplift: uplift(Number(renewalClosed.won_v), Number(renewalClosed.prior_v)),
+        unrenewed_ending_90: unrenewed.n,
+        upcoming,
+      },
+      lead_sources: leadSources.map((r) => ({ ...r, open_value: Number(r.open_value), won_value: Number(r.won_value), win_rate: winRate(r.won_n, r.lost_n), median_cycle_days: num(r.median_cycle_days) })),
     }
     res.json({ filters: f, ...out })
   }),

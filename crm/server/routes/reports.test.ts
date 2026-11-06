@@ -12,3 +12,25 @@ describe('report math', () => {
     expect(salesVelocityPerDay(10, 0.5, 1000, 0)).toBeNull()
   })
 })
+
+describe('report filters', () => {
+  it('defaults to closed-date basis over the last six months', async () => {
+    const { readFilters, rangeColumn, uplift } = await import('./reports.js')
+    const f = readFilters({}, new Date('2026-11-06T12:00:00Z'))
+    expect(f.basis).toBe('closed')
+    expect(f.from).toBe('2026-06-01')
+    expect(f.to).toBe('2026-11-06')
+    expect(rangeColumn('expected')).toBe('d.expected_close_date')
+    expect(uplift(110, 100)).toBeCloseTo(0.1)
+    expect(uplift(50, 0)).toBeNull()
+  })
+  it('ignores malformed ids and unknown deal types', async () => {
+    const { readFilters } = await import('./reports.js')
+    const f = readFilters({ product_id: 'nope', deal_type: 'weird', lead_source: ' Referral ', basis: 'created', stage_id: '66411e91-e50e-47b7-81bc-936304172e4e' })
+    expect(f.productId).toBeNull()
+    expect(f.dealType).toBeNull()
+    expect(f.leadSource).toBe('Referral')
+    expect(f.basis).toBe('created')
+    expect(f.stageId).toBe('66411e91-e50e-47b7-81bc-936304172e4e')
+  })
+})
