@@ -464,4 +464,69 @@ export interface ReportSummary {
   stage_durations: StageDurationRow[]
   renewals: RenewalReport
   lead_sources: LeadSourceRow[]
+  conversion: StageConversionRow[]
+  moves: { forward: number; backward: number; skipped: number }
+  flow_by_month: FlowMonthRow[]
+  slippage: SlippageReport
+  recurring: RecurringReport
+  previous: PreviousPeriod | null
+}
+
+/** Of deals created in range that entered this stage: what happened next. */
+export interface StageConversionRow {
+  stage_id: string
+  stage_name: string
+  position: number
+  color: string
+  entered: number
+  advanced: number // moved to any later open stage, or won
+  won_direct: number // went straight to won from this stage
+  lost_here: number // lost while in this stage
+  still_here: number
+  conversion_rate: number | null // (advanced) / (entered - still_here)
+}
+
+export interface FlowMonthRow {
+  month: string
+  created_n: number
+  created_value: number
+  won_n: number
+  won_value: number
+  lost_n: number
+  lost_value: number
+}
+
+export interface SlippageReport {
+  deals_pushed: number
+  pushes: number
+  avg_days_pushed: number | null
+  pulled_in: number // changes that moved a close date earlier
+  offenders: { deal_id: string; title: string; owner_name: string | null; pushes: number; days_pushed: number; expected_close_date: string | null; stage_name: string | null }[]
+}
+
+export interface RecurringReport {
+  active_contracts: number
+  mrr: number // monthly lines on won deals whose contract is running today
+  arr: number
+  pipeline_mrr: number // monthly lines on open deals (in window when basis = expected)
+  won_contract_value: number // full contract value of deals won in range
+  won_first_year_value: number
+  ending_90: { deal_count: number; mrr: number } // running contracts that end within 90 days
+}
+
+export interface PreviousPeriod {
+  from: string
+  to: string
+  open_deals: number
+  open_value: number
+  won_deals: number
+  won_value: number
+  lost_deals: number
+  lost_value: number
+  win_rate: number | null
+  avg_deal_size: number | null
+  median_cycle_days: number | null
+  created_n: number
+  renewal_win_rate: number | null
+  mrr: number
 }

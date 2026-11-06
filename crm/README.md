@@ -132,6 +132,29 @@ is answered unsigned, as Slack requires). The event is stored in `slack_inbox` k
 Cloud Run gives no CPU after the response. Screenshots are downloaded with the bot token at log
 time (`files:read`), capped at 8 MB.
 
+## Reports
+
+Every number on the Reports page respects the same filter set: pipeline, owner, **deal type**,
+**lead source**, **product**, **ecosystem**, **partner type**, **stage**, a date range, and a
+**date basis** that decides what "in range" means: `closed` (close date, the default), `created`
+(creation date) or `expected` (expected close date, which also limits the open pipeline to the
+window: the forecast view). Filters are in the URL, so a view can be bookmarked or shared. Each
+table has a CSV button; the headline tiles show the change versus the prior period of the same
+length with the same filters.
+
+Sections: headline tiles (open pipeline, won, win rate, median sales cycle), recurring revenue
+(MRR/ARR from monthly product lines on running contracts, recurring value in pipeline, full
+contract value won, contracts ending within 90 days), sales cycle (median, average, interquartile
+range, histogram, won vs lost, split by deal type / owner / lead source / ecosystem, median time
+per stage for won vs lost deals), renewals (due in 30/60/90 days and past due, renewal win rate,
+renewed value vs the contracts replaced, churn, contracts ending with no renewal deal), lead
+sources, stage conversion (of deals created in range: entered, advanced, won from here, lost
+here, still here, plus forward/backward/skipped moves), pipeline flow (created vs closed per
+month), close-date slippage (from the audit log: deals pushed, average push, pulled in, repeat
+offenders), then the original stage, month, forecast, funnel, lost reason, leaderboard,
+activity, deal type, overdue, product and rotting sections. Cycle lengths of zero (imported
+closed deals whose creation date equals their close date) are treated as unknown.
+
 ## Products & deal value
 
 Settings → Products. The deal's **amount is its first-year value**, computed from its product lines:

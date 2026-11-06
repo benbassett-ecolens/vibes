@@ -331,3 +331,5 @@ table.table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tl-thumb { max-height: 160px; max-width: 240px; border-radius: 6px; border: 1px solid var(--border); display: block; }
 .inbox-item { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; padding: 8px 0; border-top: 1px solid var(--border); align-items: start; }
 .inbox-item .q { white-space: pre-wrap; color: var(--text-2); font-size: 13px; border-left: 3px solid var(--border); padding-left: 8px; }
+
+.good { color: var(--good-text, #0a6a0a); }

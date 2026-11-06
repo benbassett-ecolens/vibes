@@ -34,3 +34,11 @@ describe('report filters', () => {
     expect(f.stageId).toBe('66411e91-e50e-47b7-81bc-936304172e4e')
   })
 })
+
+describe('previous window', () => {
+  it('is the same length, ending the day before the range starts', async () => {
+    const { previousWindow } = await import('./reports.js')
+    expect(previousWindow('2026-10-01', '2026-10-31')).toEqual({ from: '2026-08-31', to: '2026-09-30' })
+    expect(previousWindow('2026-11-06', '2026-11-06')).toEqual({ from: '2026-11-05', to: '2026-11-05' })
+  })
+})

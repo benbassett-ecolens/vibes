@@ -72,10 +72,45 @@ export function rangeColumn(basis: ReportBasis): string {
 const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v))
 const CYCLE_BUCKETS = ['0–14', '15–30', '31–60', '61–90', '91–180', '180+']
 
+/** The previous window of the same length, ending the day before `from`. */
+export function previousWindow(from: string, to: string): { from: string; to: string } {
+  const a = new Date(`${from}T00:00:00Z`)
+  const b = new Date(`${to}T00:00:00Z`)
+  const len = Math.round((b.getTime() - a.getTime()) / 86400000) + 1
+  const pTo = new Date(a.getTime() - 86400000)
+  const pFrom = new Date(pTo.getTime() - (len - 1) * 86400000)
+  return { from: pFrom.toISOString().slice(0, 10), to: pTo.toISOString().slice(0, 10) }
+}
+
 reportsRouter.get(
   '/summary',
   wrap(async (req, res) => {
     const f = readFilters(req.query as Record<string, unknown>)
+    const out = await computeSummary(f)
+    const prevF = { ...f, ...previousWindow(f.from, f.to) }
+    const prev = await computeSummary(prevF, true)
+    out.previous = {
+      from: prevF.from,
+      to: prevF.to,
+      open_deals: prev.open_deals,
+      open_value: prev.open_value,
+      won_deals: prev.won_deals,
+      won_value: prev.won_value,
+      lost_deals: prev.lost_deals,
+      lost_value: prev.lost_value,
+      win_rate: prev.win_rate,
+      avg_deal_size: prev.avg_deal_size,
+      median_cycle_days: prev.cycle.won_median_days,
+      created_n: prev.flow_by_month.reduce((n, m) => n + m.created_n, 0),
+      renewal_win_rate: prev.renewals.win_rate,
+      mrr: prev.recurring.mrr,
+    }
+    res.json({ filters: f, ...out })
+  }),
+)
+
+/** Everything on the Reports page for one filter set. `light` skips the per-deal lists (used for the prior period). */
+export async function computeSummary(f: Filters, light = false): Promise<ReportSummary> {
     // One parameter list for every query. Postgres rejects a bind with more parameters than the
     // statement references, so GUARD references all of them (planner folds it away).
     //  $1 pipeline  $2 owner  $3 from  $4 to  $5 deal_type  $6 lead_source  $7 product
@@ -221,10 +256,10 @@ reportsRouter.get(
        GROUP BY d.deal_type ORDER BY array_position(ARRAY['new_business','renewal','upsell'], d.deal_type)`,
       params,
     )
-    const closeOverdue = await query<Deal>(`${DEAL_SELECT} WHERE ${scope} AND ${FLAG_SQL.close_overdue} ORDER BY d.expected_close_date ASC LIMIT 50`, params)
-    const activityOverdue = await query<Deal>(`${DEAL_SELECT} WHERE ${scope} AND ${FLAG_SQL.activity_overdue} ORDER BY next_activity_at ASC LIMIT 50`, params)
+    const closeOverdue = light ? [] : await query<Deal>(`${DEAL_SELECT} WHERE ${scope} AND ${FLAG_SQL.close_overdue} ORDER BY d.expected_close_date ASC LIMIT 50`, params)
+    const activityOverdue = light ? [] : await query<Deal>(`${DEAL_SELECT} WHERE ${scope} AND ${FLAG_SQL.activity_overdue} ORDER BY next_activity_at ASC LIMIT 50`, params)
 
-    const stale = await query<Deal>(
+    const stale = light ? [] : await query<Deal>(
       `${DEAL_SELECT} WHERE ${scope} AND s.kind = 'open' AND s.rot_after_days IS NOT NULL
          AND COALESCE(d.last_activity_at, d.stage_entered_at) < now() - (s.rot_after_days || ' days')::interval
        ORDER BY COALESCE(d.last_activity_at, d.stage_entered_at) ASC LIMIT 50`,
@@ -320,10 +355,101 @@ reportsRouter.get(
          AND (d.contract_start_date + (d.contract_months || ' months')::interval)::date BETWEEN current_date AND current_date + 90`,
       params,
     ))!
-    const upcoming = await query<Deal>(
+    const upcoming = light ? [] : await query<Deal>(
       `${DEAL_SELECT} WHERE ${scope} AND d.deal_type = 'renewal' AND s.kind = 'open' ORDER BY d.expected_close_date ASC NULLS LAST LIMIT 25`,
       params,
     )
+
+    // ---- Stage conversion: of deals created in range that entered each open stage, what happened next. ----
+    const conversion = await query<ReportSummary['conversion'][number]>(
+      `WITH dd AS (
+         SELECT d.id, s.kind AS final_kind, d.stage_id AS final_stage FROM deals d JOIN stages s ON s.id = d.stage_id
+         WHERE ${scope} AND d.created_at >= $3::date AND d.created_at < ($4::date + interval '1 day')
+       ), entered AS (
+         SELECT DISTINCT h.deal_id, h.to_stage_id AS stage_id FROM deal_stage_history h JOIN dd ON dd.id = h.deal_id
+       )
+       SELECT s.id AS stage_id, s.name AS stage_name, s.position, s.color,
+         COUNT(e.deal_id)::int AS entered,
+         COUNT(e.deal_id) FILTER (WHERE EXISTS (
+           SELECT 1 FROM deal_stage_history h2 JOIN stages s2 ON s2.id = h2.to_stage_id
+           WHERE h2.deal_id = e.deal_id AND s2.pipeline_id = s.pipeline_id AND ((s2.kind = 'open' AND s2.position > s.position) OR s2.kind = 'won')
+             AND h2.entered_at > (SELECT MIN(h3.entered_at) FROM deal_stage_history h3 WHERE h3.deal_id = e.deal_id AND h3.to_stage_id = s.id)))::int AS advanced,
+         COUNT(e.deal_id) FILTER (WHERE EXISTS (
+           SELECT 1 FROM deal_stage_history h2 JOIN stages s2 ON s2.id = h2.to_stage_id
+           WHERE h2.deal_id = e.deal_id AND h2.from_stage_id = s.id AND s2.kind = 'won'))::int AS won_direct,
+         COUNT(e.deal_id) FILTER (WHERE EXISTS (
+           SELECT 1 FROM deal_stage_history h2 JOIN stages s2 ON s2.id = h2.to_stage_id
+           WHERE h2.deal_id = e.deal_id AND h2.from_stage_id = s.id AND s2.kind = 'lost'))::int AS lost_here,
+         COUNT(e.deal_id) FILTER (WHERE dd.final_stage = s.id)::int AS still_here
+       FROM stages s
+       LEFT JOIN entered e ON e.stage_id = s.id
+       LEFT JOIN dd ON dd.id = e.deal_id
+       WHERE s.kind = 'open' AND s.pipeline_id = COALESCE($1::uuid, ${defaultPipeline}) AND ${GUARD}
+       GROUP BY s.id ORDER BY s.position`,
+      params,
+    )
+    const moves = (await one<{ forward: number; backward: number; skipped: number }>(
+      `SELECT COUNT(*) FILTER (WHERE t.position > fr.position)::int AS forward,
+         COUNT(*) FILTER (WHERE t.position < fr.position AND t.kind = 'open')::int AS backward,
+         COUNT(*) FILTER (WHERE t.kind = 'open' AND fr.kind = 'open' AND t.position > fr.position + 1)::int AS skipped
+       FROM deal_stage_history h JOIN deals d ON d.id = h.deal_id
+       JOIN stages t ON t.id = h.to_stage_id LEFT JOIN stages fr ON fr.id = h.from_stage_id
+       WHERE ${scope} AND h.from_stage_id IS NOT NULL AND h.entered_at >= $3::date AND h.entered_at < ($4::date + interval '1 day')`,
+      params,
+    ))!
+
+    // ---- Pipeline flow: created vs closed per month, over the range (each event on its own date). ----
+    const flow = await query<ReportSummary['flow_by_month'][number]>(
+      `WITH months AS (SELECT generate_series(date_trunc('month', $3::date), date_trunc('month', $4::date), interval '1 month') AS m)
+       SELECT to_char(m.m, 'YYYY-MM') AS month,
+         (SELECT COUNT(*)::int FROM deals d WHERE ${scope} AND date_trunc('month', d.created_at) = m.m) AS created_n,
+         (SELECT COALESCE(SUM(d.amount), 0) FROM deals d WHERE ${scope} AND date_trunc('month', d.created_at) = m.m) AS created_value,
+         (SELECT COUNT(*)::int FROM deals d JOIN stages s ON s.id = d.stage_id WHERE ${scope} AND s.kind = 'won' AND date_trunc('month', d.closed_at) = m.m) AS won_n,
+         (SELECT COALESCE(SUM(d.amount), 0) FROM deals d JOIN stages s ON s.id = d.stage_id WHERE ${scope} AND s.kind = 'won' AND date_trunc('month', d.closed_at) = m.m) AS won_value,
+         (SELECT COUNT(*)::int FROM deals d JOIN stages s ON s.id = d.stage_id WHERE ${scope} AND s.kind = 'lost' AND date_trunc('month', d.closed_at) = m.m) AS lost_n,
+         (SELECT COALESCE(SUM(d.amount), 0) FROM deals d JOIN stages s ON s.id = d.stage_id WHERE ${scope} AND s.kind = 'lost' AND date_trunc('month', d.closed_at) = m.m) AS lost_value
+       FROM months m ORDER BY 1`,
+      params,
+    )
+
+    // ---- Slippage: expected close dates pushed out (from the audit log), in range. ----
+    const slipCte = `WITH p AS (
+      SELECT l.entity_id AS deal_id,
+        (l.changes->'expected_close_date'->>'to')::date - (l.changes->'expected_close_date'->>'from')::date AS delta
+      FROM audit_log l JOIN deals d ON d.id = l.entity_id
+      WHERE l.entity_type = 'deal' AND l.changes ? 'expected_close_date'
+        AND (l.changes->'expected_close_date'->>'from') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND (l.changes->'expected_close_date'->>'to') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+        AND l.created_at >= $3::date AND l.created_at < ($4::date + interval '1 day') AND ${scope})`
+    const slipTotals = (await one<{ deals_pushed: number; pushes: number; avg_days: number | null; pulled_in: number }>(
+      `${slipCte} SELECT COUNT(DISTINCT deal_id) FILTER (WHERE delta > 0)::int AS deals_pushed, COUNT(*) FILTER (WHERE delta > 0)::int AS pushes,
+         AVG(delta) FILTER (WHERE delta > 0) AS avg_days, COUNT(*) FILTER (WHERE delta < 0)::int AS pulled_in FROM p`,
+      params,
+    ))!
+    const offenders = light ? [] : await query<ReportSummary['slippage']['offenders'][number]>(
+      `${slipCte} SELECT p.deal_id, d.title, u.name AS owner_name, COUNT(*)::int AS pushes, SUM(p.delta)::int AS days_pushed, d.expected_close_date, s.name AS stage_name
+       FROM p JOIN deals d ON d.id = p.deal_id LEFT JOIN users u ON u.id = d.owner_id LEFT JOIN stages s ON s.id = d.stage_id
+       WHERE p.delta > 0 GROUP BY p.deal_id, d.title, u.name, d.expected_close_date, s.name ORDER BY pushes DESC, days_pushed DESC LIMIT 15`,
+      params,
+    )
+
+    // ---- Recurring revenue from monthly product lines. ----
+    const monthlyLine = `CASE WHEN dp.pricing_type = 'monthly' THEN dp.quantity * dp.unit_price ELSE 0 END`
+    const contractValue = `CASE dp.pricing_type WHEN 'monthly' THEN dp.quantity * dp.unit_price * COALESCE(d.contract_months, 12) WHEN 'percent' THEN dp.basis_amount * dp.unit_price / 100 ELSE dp.quantity * dp.unit_price END`
+    const running = `s.kind = 'won' AND d.contract_start_date IS NOT NULL AND d.contract_months IS NOT NULL
+      AND d.contract_start_date <= current_date AND (d.contract_start_date + (d.contract_months || ' months')::interval)::date > current_date`
+    const recurring = (await one<{ active: number; mrr: number; pipeline_mrr: number; won_cv: number; won_fy: number; ending_n: number; ending_mrr: number }>(
+      `SELECT
+         (SELECT COUNT(*)::int FROM deals d JOIN stages s ON s.id = d.stage_id WHERE ${scope} AND ${running}) AS active,
+         (SELECT COALESCE(SUM(${monthlyLine}), 0) FROM deals d JOIN stages s ON s.id = d.stage_id JOIN deal_products dp ON dp.deal_id = d.id WHERE ${scope} AND ${running}) AS mrr,
+         (SELECT COALESCE(SUM(${monthlyLine}), 0) FROM deals d JOIN stages s ON s.id = d.stage_id JOIN deal_products dp ON dp.deal_id = d.id WHERE ${openScope} AND s.kind = 'open') AS pipeline_mrr,
+         (SELECT COALESCE(SUM(${contractValue}), 0) FROM deals d JOIN stages s ON s.id = d.stage_id JOIN deal_products dp ON dp.deal_id = d.id WHERE ${scope} AND s.kind = 'won' AND ${inRange}) AS won_cv,
+         (SELECT COALESCE(SUM(d.amount), 0) FROM deals d JOIN stages s ON s.id = d.stage_id WHERE ${scope} AND s.kind = 'won' AND ${inRange}) AS won_fy,
+         (SELECT COUNT(*)::int FROM deals d JOIN stages s ON s.id = d.stage_id WHERE ${scope} AND ${running}
+            AND (d.contract_start_date + (d.contract_months || ' months')::interval)::date <= current_date + 90) AS ending_n,
+         (SELECT COALESCE(SUM(${monthlyLine}), 0) FROM deals d JOIN stages s ON s.id = d.stage_id JOIN deal_products dp ON dp.deal_id = d.id WHERE ${scope} AND ${running}
+            AND (d.contract_start_date + (d.contract_months || ' months')::interval)::date <= current_date + 90) AS ending_mrr`,
+      params,
+    ))!
 
     // ---- Lead sources ----
     const leadSources = await query<ReportSummary['lead_sources'][number]>(
@@ -393,7 +519,20 @@ reportsRouter.get(
         upcoming,
       },
       lead_sources: leadSources.map((r) => ({ ...r, open_value: Number(r.open_value), won_value: Number(r.won_value), win_rate: winRate(r.won_n, r.lost_n), median_cycle_days: num(r.median_cycle_days) })),
+      conversion: conversion.map((r) => ({ ...r, conversion_rate: r.entered - r.still_here > 0 ? r.advanced / (r.entered - r.still_here) : null })),
+      moves,
+      flow_by_month: flow.map((m) => ({ ...m, created_value: Number(m.created_value), won_value: Number(m.won_value), lost_value: Number(m.lost_value) })),
+      slippage: { deals_pushed: slipTotals.deals_pushed, pushes: slipTotals.pushes, avg_days_pushed: num(slipTotals.avg_days), pulled_in: slipTotals.pulled_in, offenders },
+      recurring: {
+        active_contracts: recurring.active,
+        mrr: Number(recurring.mrr),
+        arr: Number(recurring.mrr) * 12,
+        pipeline_mrr: Number(recurring.pipeline_mrr),
+        won_contract_value: Number(recurring.won_cv),
+        won_first_year_value: Number(recurring.won_fy),
+        ending_90: { deal_count: recurring.ending_n, mrr: Number(recurring.ending_mrr) },
+      },
+      previous: null,
     }
-    res.json({ filters: f, ...out })
-  }),
-)
+    return out
+}

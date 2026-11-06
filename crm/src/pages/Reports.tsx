@@ -25,6 +25,38 @@ function isoDaysAgo(n: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+/** Client-side CSV of whatever a table shows. */
+export function downloadCsv(filename: string, input: ReadonlyArray<object>): void {
+  const rows = input as Array<Record<string, unknown>>
+  if (!rows.length) return
+  const cols = Object.keys(rows[0])
+  const esc = (v: unknown) => {
+    const t = v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v)
+    return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t
+  }
+  const csv = [cols.join(','), ...rows.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n')
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+function CsvButton({ name, rows }: { name: string; rows: ReadonlyArray<object> }) {
+  return <button className="btn ghost sm" style={{ marginLeft: 8 }} disabled={!rows.length} onClick={() => downloadCsv(`${name}.csv`, rows)} title="Download this table as CSV">⤓ CSV</button>
+}
+
+/** "vs prior period" line for a stat tile. */
+function Delta({ now, prev, money: isMoney, pctPoints, invert }: { now: number | null; prev: number | null | undefined; money?: boolean; pctPoints?: boolean; invert?: boolean }) {
+  if (now === null || prev === null || prev === undefined) return <span className="muted">no prior period</span>
+  const diff = now - prev
+  if (Math.abs(diff) < 1e-9) return <span className="muted">same as prior period</span>
+  const good = invert ? diff < 0 : diff > 0
+  const txt = pctPoints ? `${diff > 0 ? '+' : ''}${Math.round(diff * 100)} pts` : isMoney ? `${diff > 0 ? '+' : '−'}${compactMoney(Math.abs(diff))}` : `${diff > 0 ? '+' : ''}${Math.round(diff * 10) / 10}`
+  const rel = prev !== 0 && !pctPoints ? ` (${diff > 0 ? '+' : ''}${Math.round((diff / Math.abs(prev)) * 100)}%)` : ''
+  return <span className={good ? 'good' : 'error'}>{txt}{rel} vs prior period</span>
+}
+
 const BASIS_LABEL: Record<ReportBasis, string> = { closed: 'Closed in range', created: 'Created in range', expected: 'Expected to close in range' }
 const days = (n: number | null | undefined) => (n === null || n === undefined ? '—' : `${Math.round(n)}d`)
 
@@ -148,10 +180,18 @@ export function ReportsPage() {
               {extraFilters > 0 && <> Filtered by {[dealType && DEAL_TYPE_LABEL[dealType as keyof typeof DEAL_TYPE_LABEL], leadSource, products.data?.items.find((p) => p.id === productId)?.name, ecosystem, partnerType, stages.find((x) => x.id === stageId)?.name].filter(Boolean).join(' · ')}.</>}
             </p>
             <div className="grid c4" style={{ marginBottom: 16 }}>
-              <Stat label={basis === 'expected' ? 'Open in window' : 'Open pipeline'} value={compactMoney(s.open_value)} sub={`${s.open_deals} deals · ${compactMoney(s.weighted_value)} weighted`} />
-              <Stat label="Won" value={compactMoney(s.won_value)} sub={`${s.won_deals} deals · lost ${s.lost_deals} (${compactMoney(s.lost_value)})`} />
-              <Stat label="Win rate" value={pct(s.win_rate)} sub={s.avg_deal_size ? `avg won deal ${money(s.avg_deal_size)}` : 'no closed deals in range'} />
-              <Stat label="Sales cycle (median)" value={s.cycle.won_median_days === null ? '—' : `${Math.round(s.cycle.won_median_days)} days`} sub={s.cycle.won_median_days === null ? 'needs won deals with a create → close span' : `avg ${days(s.cycle.won_avg_days)} · velocity ${s.velocity_per_day ? `${compactMoney(s.velocity_per_day)}/day` : '—'}`} />
+              <Stat label={basis === 'expected' ? 'Open in window' : 'Open pipeline'} value={compactMoney(s.open_value)} sub={<>{s.open_deals} deals · {compactMoney(s.weighted_value)} weighted{basis === 'expected' && <><br /><Delta now={s.open_value} prev={s.previous?.open_value} money /></>}</>} />
+              <Stat label="Won" value={compactMoney(s.won_value)} sub={<>{s.won_deals} deals · lost {s.lost_deals} ({compactMoney(s.lost_value)})<br /><Delta now={s.won_value} prev={s.previous?.won_value} money /></>} />
+              <Stat label="Win rate" value={pct(s.win_rate)} sub={<>{s.avg_deal_size ? `avg won deal ${money(s.avg_deal_size)}` : 'no closed deals in range'}<br /><Delta now={s.win_rate} prev={s.previous?.win_rate} pctPoints /></>} />
+              <Stat label="Sales cycle (median)" value={s.cycle.won_median_days === null ? '—' : `${Math.round(s.cycle.won_median_days)} days`} sub={<>{s.cycle.won_median_days === null ? 'needs won deals with a create → close span' : `avg ${days(s.cycle.won_avg_days)} · velocity ${s.velocity_per_day ? `${compactMoney(s.velocity_per_day)}/day` : '—'}`}<br /><Delta now={s.cycle.won_median_days} prev={s.previous?.median_cycle_days} invert /></>} />
+            </div>
+            {s.previous && <p className="muted small" style={{ marginTop: -8, marginBottom: 12 }}>Prior period: {s.previous.from} to {s.previous.to}, same filters.</p>}
+
+            <div className="grid c4" style={{ marginBottom: 16 }}>
+              <Stat label="Monthly recurring" value={compactMoney(s.recurring.mrr)} sub={<>{compactMoney(s.recurring.arr)} annualised · {s.recurring.active_contracts} running contract{s.recurring.active_contracts === 1 ? '' : 's'}<br /><Delta now={s.recurring.mrr} prev={s.previous?.mrr} money /></>} />
+              <Stat label="Recurring in pipeline" value={compactMoney(s.recurring.pipeline_mrr)} sub={`per month on open deals${basis === 'expected' ? ' in window' : ''}`} />
+              <Stat label="Contract value won" value={compactMoney(s.recurring.won_contract_value)} sub={`full term · ${compactMoney(s.recurring.won_first_year_value)} first year`} />
+              <Stat label="Ending within 90 days" value={compactMoney(s.recurring.ending_90.mrr)} sub={`per month across ${s.recurring.ending_90.deal_count} contract${s.recurring.ending_90.deal_count === 1 ? '' : 's'}`} />
             </div>
 
             <div className="grid c2" style={{ marginBottom: 16 }}>
@@ -187,12 +227,13 @@ export function ReportsPage() {
                   </div>
                 </div>
                 <div style={{ marginTop: 8 }}><CycleSplit rows={s.cycle.by[cycleSplit]} /></div>
+                <div style={{ marginTop: 6, textAlign: 'right' }}><CsvButton name={`cycle-by-${cycleSplit}`} rows={s.cycle.by[cycleSplit]} /></div>
               </div>
             </div>
 
             <div className="grid c2" style={{ marginBottom: 16 }}>
               <div className="card">
-                <div className="card-h"><h2>Renewals</h2><span className="muted small right">open renewals by due date · outcomes {BASIS_LABEL[basis].toLowerCase()}</span></div>
+                <div className="card-h"><h2>Renewals</h2><span className="muted small right">open renewals by due date · outcomes {BASIS_LABEL[basis].toLowerCase()} <CsvButton name="upcoming-renewals" rows={s.renewals.upcoming.map((d) => ({ title: d.title, owner: d.owner_name, stage: d.stage_name, amount: d.amount, expected_close_date: d.expected_close_date }))} /></span></div>
                 <div className="card-b">
                   <div className="grid c4" style={{ marginBottom: 12 }}>
                     {s.renewals.due.map((w) => (
@@ -217,7 +258,7 @@ export function ReportsPage() {
                 </div>
               </div>
               <div className="card">
-                <div className="card-h"><h2>Lead sources</h2><span className="muted small right">created in range · open now · outcomes {BASIS_LABEL[basis].toLowerCase()}</span></div>
+                <div className="card-h"><h2>Lead sources</h2><span className="muted small right">created in range · open now · outcomes {BASIS_LABEL[basis].toLowerCase()} <CsvButton name="lead-sources" rows={s.lead_sources} /></span></div>
                 <table className="table">
                   <thead><tr><th>Source</th><th className="num">Created</th><th className="num">Open</th><th className="num">Open value</th><th className="num">Won</th><th className="num">Won value</th><th className="num">Lost</th><th className="num">Win rate</th><th className="num">Median cycle</th></tr></thead>
                   <tbody>
@@ -231,8 +272,69 @@ export function ReportsPage() {
             </div>
 
             <div className="grid c2" style={{ marginBottom: 16 }}>
+              <div className="card">
+                <div className="card-h"><h2>Stage conversion</h2><span className="muted small right">deals created in range, by the stages they entered <CsvButton name="stage-conversion" rows={s.conversion} /></span></div>
+                <table className="table">
+                  <thead><tr><th>Stage</th><th className="num">Entered</th><th className="num">Advanced</th><th className="num">Won from here</th><th className="num">Lost here</th><th className="num">Still here</th><th className="num">Conversion</th></tr></thead>
+                  <tbody>
+                    {s.conversion.map((r) => (
+                      <tr key={r.stage_id}><td><span className="color-dot" style={{ background: r.color }} />{r.stage_name}</td><td className="num">{r.entered}</td><td className="num">{r.advanced}</td><td className="num">{r.won_direct}</td><td className={`num ${r.lost_here ? 'error' : ''}`}>{r.lost_here}</td><td className="num">{r.still_here}</td><td className="num">{pct(r.conversion_rate)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="card-b small muted">Conversion = advanced ÷ (entered − still here). Stage moves in range: {s.moves.forward} forward, {s.moves.backward} backward, {s.moves.skipped} skipped a stage.</div>
+              </div>
               <div className="card pad">
-                <div className="chart-title">Pipeline by stage</div>
+                <div className="chart-title">Pipeline flow <CsvButton name="pipeline-flow" rows={s.flow_by_month} /></div>
+                <div className="chart-sub">Created vs closed per month, each on its own date. Filling or draining?</div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={s.flow_by_month.map((m) => ({ ...m, label: monthLabel(m.month) }))} margin={{ top: 8, right: 8, left: 8, bottom: 0 }} barCategoryGap="25%">
+                    <CartesianGrid vertical={false} stroke="var(--grid)" />
+                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: 'var(--text-2)' }} axisLine={false} tickLine={false} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} width={32} />
+                    <Tooltip contentStyle={tipStyle} formatter={(v: number, name: string) => [v, name === 'created_n' ? 'Created' : name === 'won_n' ? 'Won' : 'Lost']} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} formatter={(v: string) => (v === 'created_n' ? 'Created' : v === 'won_n' ? 'Won' : 'Lost')} />
+                    <Bar dataKey="created_n" fill={SERIES.s1} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                    <Bar dataKey="won_n" fill={SERIES.won} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                    <Bar dataKey="lost_n" fill={SERIES.lost} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  </BarChart>
+                </ResponsiveContainer>
+                <table className="table" style={{ marginTop: 8 }}>
+                  <thead><tr><th>Month</th><th className="num">Created</th><th className="num">Created value</th><th className="num">Won</th><th className="num">Lost</th><th className="num">Net deals</th></tr></thead>
+                  <tbody>
+                    {s.flow_by_month.slice(-12).map((m) => (
+                      <tr key={m.month}><td>{monthLabel(m.month)}</td><td className="num">{m.created_n}</td><td className="num">{money(m.created_value)}</td><td className="num">{m.won_n}</td><td className="num">{m.lost_n}</td><td className={`num ${m.created_n - m.won_n - m.lost_n < 0 ? 'error' : ''}`}>{m.created_n - m.won_n - m.lost_n > 0 ? '+' : ''}{m.created_n - m.won_n - m.lost_n}</td></tr>
+                    ))}
+                    {s.flow_by_month.length > 12 && <tr><td colSpan={6} className="muted small">Last 12 months shown; the chart and CSV cover the whole range.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div className="card-h"><h2>Close-date slippage</h2><span className="muted small right">expected close dates changed in range (from the audit log) <CsvButton name="slippage" rows={s.slippage.offenders} /></span></div>
+              <div className="card-b">
+                <div className="grid c4" style={{ marginBottom: 12 }}>
+                  <Stat label="Deals pushed" value={s.slippage.deals_pushed} sub={`${s.slippage.pushes} push${s.slippage.pushes === 1 ? '' : 'es'} in total`} />
+                  <Stat label="Average push" value={s.slippage.avg_days_pushed === null ? '—' : `${Math.round(s.slippage.avg_days_pushed)} days`} sub="per change that moved a date later" />
+                  <Stat label="Pulled in" value={s.slippage.pulled_in} sub="changes that moved a close date earlier" />
+                  <Stat label="Repeat offenders" value={s.slippage.offenders.filter((o) => o.pushes > 1).length} sub="deals pushed more than once" />
+                </div>
+                <table className="table">
+                  <thead><tr><th>Deal</th><th>Owner</th><th>Stage</th><th className="num">Pushes</th><th className="num">Days pushed</th><th>Now expected</th></tr></thead>
+                  <tbody>
+                    {s.slippage.offenders.map((o) => (
+                      <tr key={o.deal_id}><td><Link to={`/deals/${o.deal_id}`}>{o.title}</Link></td><td>{o.owner_name ?? '—'}</td><td>{o.stage_name ?? '—'}</td><td className="num">{o.pushes}</td><td className="num">{o.days_pushed}</td><td>{fmtDate(o.expected_close_date)}</td></tr>
+                    ))}
+                    {!s.slippage.offenders.length && <tr><td colSpan={6} className="empty">No close dates were pushed in range.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="grid c2" style={{ marginBottom: 16 }}>
+              <div className="card pad">
+                <div className="chart-title">Pipeline by stage <CsvButton name="pipeline-by-stage" rows={s.by_stage} /></div>
                 <div className="chart-sub">Open value per stage; weighted = value × stage probability</div>
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart data={s.by_stage.filter((r) => r.stage_kind === 'open')} margin={{ top: 8, right: 8, left: 8, bottom: 0 }} barCategoryGap="30%">
@@ -256,7 +358,7 @@ export function ReportsPage() {
               </div>
 
               <div className="card pad">
-                <div className="chart-title">Won vs lost by month</div>
+                <div className="chart-title">Won vs lost by month <CsvButton name="won-lost-by-month" rows={s.won_by_month} /></div>
                 <div className="chart-sub">Closed deals by close date</div>
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart data={s.won_by_month.map((m) => ({ ...m, label: monthLabel(m.month) }))} margin={{ top: 8, right: 8, left: 8, bottom: 0 }} barCategoryGap="30%">
@@ -337,7 +439,7 @@ export function ReportsPage() {
 
             <div className="grid c2" style={{ marginBottom: 16 }}>
               <div className="card">
-                <div className="card-h"><h2>Leaderboard</h2><span className="muted small right">won in range · open now</span></div>
+                <div className="card-h"><h2>Leaderboard</h2><span className="muted small right">won in range · open now <CsvButton name="leaderboard" rows={s.by_owner} /></span></div>
                 <table className="table">
                   <thead><tr><th>Owner</th><th className="num">Won</th><th className="num">Won value</th><th className="num">Lost</th><th className="num">Open</th><th className="num">Open value</th><th className="num">Activities</th></tr></thead>
                   <tbody>
@@ -369,7 +471,7 @@ export function ReportsPage() {
 
             <div className="grid c2" style={{ marginBottom: 16 }}>
               <div className="card">
-                <div className="card-h"><h2>By deal type</h2><span className="muted small right">new business vs renewal vs upsell</span></div>
+                <div className="card-h"><h2>By deal type</h2><span className="muted small right">new business vs renewal vs upsell <CsvButton name="by-deal-type" rows={s.by_deal_type} /></span></div>
                 <table className="table">
                   <thead><tr><th>Type</th><th className="num">Open</th><th className="num">Open value</th><th className="num">Won</th><th className="num">Won value</th></tr></thead>
                   <tbody>
@@ -397,7 +499,7 @@ export function ReportsPage() {
             </div>
 
             <div className="card" style={{ marginBottom: 16 }}>
-              <div className="card-h"><h2>Revenue by product</h2><span className="muted small right">line totals on open deals now, and on deals won in range</span></div>
+              <div className="card-h"><h2>Revenue by product</h2><span className="muted small right">line totals on open deals now, and on deals won in range <CsvButton name="revenue-by-product" rows={s.by_product} /></span></div>
               <table className="table">
                 <thead><tr><th>Product</th><th>Pricing</th><th className="num">Open deals</th><th className="num">Open first-year value</th><th className="num">Won deals</th><th className="num">Won first-year value</th></tr></thead>
                 <tbody>
@@ -409,7 +511,7 @@ export function ReportsPage() {
             </div>
 
             <div className="card">
-              <div className="card-h"><h2>Rotting deals</h2><span className="muted small right">open deals idle past their stage limit</span></div>
+              <div className="card-h"><h2>Rotting deals</h2><span className="muted small right">open deals idle past their stage limit <CsvButton name="rotting-deals" rows={s.stale_deals.map((d) => ({ title: d.title, stage: d.stage_name, owner: d.owner_name, amount: d.amount, last_activity_at: d.last_activity_at, stage_entered_at: d.stage_entered_at }))} /></span></div>
               <table className="table">
                 <thead><tr><th>Deal</th><th>Stage</th><th>Owner</th><th className="num">Amount</th><th>Last activity</th><th>In stage since</th></tr></thead>
                 <tbody>
