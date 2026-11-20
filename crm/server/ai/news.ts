@@ -5,6 +5,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk'
 import { config } from '../config.js'
+import { HttpError } from '../http.js'
 
 export interface NewsCompany {
   name: string
@@ -76,6 +77,18 @@ export function collectSources(content: Anthropic.ContentBlock[]): NewsSource[] 
   return [...seen.values()].slice(0, 20)
 }
 
+/** Turn SDK failures into a readable 502 instead of a bare "Internal server error". */
+export function toHttpError(e: unknown): Error {
+  if (e instanceof Anthropic.AuthenticationError) return new HttpError(502, 'Claude API rejected the key (401). Check the crm-anthropic-api-key secret and redeploy.')
+  if (e instanceof Anthropic.PermissionDeniedError) return new HttpError(502, `Claude API: permission denied (403): ${e.message}`)
+  if (e instanceof Anthropic.RateLimitError) return new HttpError(502, 'Claude API rate limit hit (429). Try again in a minute.')
+  if (e instanceof Anthropic.BadRequestError) return new HttpError(502, `Claude API rejected the request (400): ${e.message}`)
+  if (e instanceof Anthropic.APIConnectionTimeoutError) return new HttpError(502, 'Claude API timed out. Try a narrower question.')
+  if (e instanceof Anthropic.APIStatusError) return new HttpError(502, `Claude API error ${e.status}: ${e.message}`)
+  if (e instanceof Anthropic.APIConnectionError) return new HttpError(502, `Could not reach the Claude API: ${e.message}`)
+  return e instanceof Error ? e : new Error(String(e))
+}
+
 export async function askNews(question: string, companies: NewsCompany[]): Promise<NewsAnswer> {
   if (!aiConfigured()) throw new Error('ANTHROPIC_API_KEY is not configured')
   const api = getClient()
@@ -89,11 +102,16 @@ export async function askNews(question: string, companies: NewsCompany[]): Promi
     tools: [{ type: 'web_search_20260209' as const, name: 'web_search' as const, max_uses: Math.min(12, 3 + companies.length * 2) }],
     output_config: { effort: 'medium' as const },
   }
-  let response = await api.messages.stream({ ...params, messages }).finalMessage()
-  // Server-side search loop paused: resend as-is and let it continue (bounded).
-  for (let i = 0; i < 3 && response.stop_reason === 'pause_turn'; i++) {
-    messages.push({ role: 'assistant', content: response.content })
+  let response: Anthropic.Message
+  try {
     response = await api.messages.stream({ ...params, messages }).finalMessage()
+    // Server-side search loop paused: resend as-is and let it continue (bounded).
+    for (let i = 0; i < 3 && response.stop_reason === 'pause_turn'; i++) {
+      messages.push({ role: 'assistant', content: response.content })
+      response = await api.messages.stream({ ...params, messages }).finalMessage()
+    }
+  } catch (e) {
+    throw toHttpError(e)
   }
   if (response.stop_reason === 'refusal') {
     return { answer: `The model declined to answer this question${response.stop_details?.explanation ? `: ${response.stop_details.explanation}` : '.'}`, sources: [], model: response.model, refused: true }
