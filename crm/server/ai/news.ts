@@ -84,7 +84,7 @@ export function toHttpError(e: unknown): Error {
   if (e instanceof Anthropic.RateLimitError) return new HttpError(502, 'Claude API rate limit hit (429). Try again in a minute.')
   if (e instanceof Anthropic.BadRequestError) return new HttpError(502, `Claude API rejected the request (400): ${e.message}`)
   if (e instanceof Anthropic.APIConnectionTimeoutError) return new HttpError(502, 'Claude API timed out. Try a narrower question.')
-  if (e instanceof Anthropic.APIStatusError) return new HttpError(502, `Claude API error ${e.status}: ${e.message}`)
+  if (e instanceof Anthropic.APIError) return new HttpError(502, `Claude API error ${e.status ?? ''}: ${e.message}`)
   if (e instanceof Anthropic.APIConnectionError) return new HttpError(502, `Could not reach the Claude API: ${e.message}`)
   return e instanceof Error ? e : new Error(String(e))
 }
