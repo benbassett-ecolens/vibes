@@ -209,7 +209,9 @@ export function ContactForm({ initial, onClose, onSaved, defaults }: { initial?:
   )
 }
 
-export function CompanyForm({ initial, onClose, onSaved }: { initial?: Company; onClose: () => void; onSaved: (c: Company) => void }) {
+export function CompanyForm({ initial, kind, onClose, onSaved }: { initial?: Company; kind?: 'company' | 'var'; onClose: () => void; onSaved: (c: Company) => void }) {
+  const recordKind = initial?.kind ?? kind ?? 'company'
+  const label = recordKind === 'var' ? 'VAR' : 'company'
   const { user } = useAuth()
   const toast = useToast()
   const [form, setForm] = useState({
@@ -222,7 +224,7 @@ export function CompanyForm({ initial, onClose, onSaved }: { initial?: Company; 
     owner_id: initial?.owner_id ?? user?.id ?? null,
     notes: initial?.notes ?? '',
     ecosystems: (initial?.ecosystems ?? []).join(', '),
-    partner_type: initial?.partner_type ?? '',
+    partner_type: initial?.partner_type ?? (kind === 'var' ? 'VAR' : ''),
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -232,9 +234,9 @@ export function CompanyForm({ initial, onClose, onSaved }: { initial?: Company; 
     setBusy(true)
     setError(null)
     try {
-      const body = { name: form.name, domain: form.domain || null, website: form.website || null, industry: form.industry || null, phone: form.phone || null, address: form.address || null, owner_id: form.owner_id, notes: form.notes || null, ecosystems: form.ecosystems.split(',').map((x) => x.trim()).filter(Boolean), partner_type: form.partner_type || null }
+      const body = { name: form.name, domain: form.domain || null, website: form.website || null, industry: form.industry || null, phone: form.phone || null, address: form.address || null, owner_id: form.owner_id, notes: form.notes || null, ecosystems: form.ecosystems.split(',').map((x) => x.trim()).filter(Boolean), partner_type: form.partner_type || null, kind: recordKind }
       const c = initial ? await api.patch<Company>(`/api/companies/${initial.id}`, body) : await api.post<Company>('/api/companies', body)
-      toast(initial ? 'Company updated' : 'Company created')
+      toast(initial ? `${label === 'VAR' ? 'VAR' : 'Company'} updated` : `${label === 'VAR' ? 'VAR' : 'Company'} created`)
       onSaved(c)
     } catch (err) {
       setError((err as Error).message)
@@ -243,7 +245,7 @@ export function CompanyForm({ initial, onClose, onSaved }: { initial?: Company; 
     }
   }
   return (
-    <Modal title={initial ? 'Edit company' : 'New company'} onClose={onClose}>
+    <Modal title={initial ? `Edit ${label}` : `New ${label}`} onClose={onClose}>
       <form onSubmit={submit}>
         <div className="form-grid">
           <Field label="Name" span2><input className="input" required autoFocus value={form.name} onChange={(e) => set({ name: e.target.value })} /></Field>

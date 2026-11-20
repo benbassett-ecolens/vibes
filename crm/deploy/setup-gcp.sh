@@ -91,7 +91,7 @@ SECRET_BINDINGS="DB_PASSWORD=crm-db-password:latest,SESSION_SECRET=crm-session-s
 for s in crm-db-password crm-session-secret crm-sync-secret; do
   gcloud secrets add-iam-policy-binding "$s" --member="serviceAccount:$RUN_SA" --role=roles/secretmanager.secretAccessor >/dev/null
 done
-for pair in "crm-google-client-secret:GOOGLE_CLIENT_SECRET" "crm-slack-bot-token:SLACK_BOT_TOKEN" "crm-slack-signing-secret:SLACK_SIGNING_SECRET"; do
+for pair in "crm-google-client-secret:GOOGLE_CLIENT_SECRET" "crm-slack-bot-token:SLACK_BOT_TOKEN" "crm-slack-signing-secret:SLACK_SIGNING_SECRET" "crm-anthropic-api-key:ANTHROPIC_API_KEY"; do
   name="${pair%%:*}"; var="${pair##*:}"
   case "$var" in SLACK_*) [ "$WITH_SLACK" = "1" ] || continue;; esac
   if gcloud secrets describe "$name" >/dev/null 2>&1; then

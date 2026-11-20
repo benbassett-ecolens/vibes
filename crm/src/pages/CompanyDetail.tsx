@@ -7,6 +7,7 @@ import { ActivityComposer } from '../components/ActivityComposer'
 import { CompanyForm, ContactForm, DealForm } from '../components/Forms'
 import { Timeline } from '../components/Timeline'
 import { Avatar, ConfirmButton, useToast } from '../components/ui'
+import { NewsCard } from '../components/News'
 import type { Activity, AuditEntry, Company, Contact, Deal, Paged, TimelineItem } from '../../shared/types'
 
 export function CompanyDetail() {
@@ -40,8 +41,8 @@ export function CompanyDetail() {
     <>
       <div className="topbar">
         <div className="grow">
-          <div className="small muted"><Link to="/companies">Companies</Link></div>
-          <h1 className="row">{c.name} {c.archived_at && <span className="badge warn">archived</span>}</h1>
+          <div className="small muted">{c.kind === 'var' ? <Link to="/vars">VARs</Link> : <Link to="/companies">Companies</Link>}</div>
+          <h1 className="row">{c.name} {c.kind === 'var' && <span className="badge">VAR</span>} {c.archived_at && <span className="badge warn">archived</span>}</h1>
         </div>
         <button className="btn" onClick={() => setNewContact(true)}>+ Contact</button>
         <button className="btn" onClick={() => setNewDeal(true)}>+ Deal</button>
@@ -50,6 +51,7 @@ export function CompanyDetail() {
       </div>
       <div className="content detail-layout">
         <div className="grid">
+          {c.kind === 'var' && <NewsCard companyId={c.id} />}
           <ActivityComposer companyId={c.id} onCreated={refreshAll} />
           <div className="card">
             <div className="card-h"><h2>Timeline</h2></div>

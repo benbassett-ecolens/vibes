@@ -242,8 +242,8 @@ export async function commitImport(csv: string, opts: ImportOptions): Promise<Im
         if (!company) {
           const ecosystems = (r.ecosystem ?? '').split(',').map((x) => x.trim()).filter(Boolean)
           company = (await one<{ id: string }>(
-            `INSERT INTO companies (name, industry, website, notes, owner_id, created_by, ecosystems, partner_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-            [r.company, r.industry, r.website, companyNotes, ownerId, opts.actorId, ecosystems, r.partner_type],
+            `INSERT INTO companies (name, industry, website, notes, owner_id, created_by, ecosystems, partner_type, kind) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+            [r.company, r.industry, r.website, companyNotes, ownerId, opts.actorId, ecosystems, r.partner_type, /VAR/i.test(r.partner_type ?? '') ? 'var' : 'company'],
             client,
           ))!
           result.companies_created++

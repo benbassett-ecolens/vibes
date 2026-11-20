@@ -55,6 +55,7 @@ export interface Company {
   notes: string | null
   ecosystems: string[]
   partner_type: string | null
+  kind: 'company' | 'var'
   owner_id: string | null
   owner_name?: string | null
   created_by: string | null
@@ -173,6 +174,19 @@ export interface Attachment {
   filename: string
   mimetype: string
   size: number
+}
+
+/** A news question about a VAR (or all VARs) answered by Claude with web search. */
+export interface CompanyNews {
+  id: string
+  company_id: string | null
+  company_name: string | null
+  question: string
+  answer: string // Markdown
+  sources: Array<{ url: string; title: string | null }>
+  model: string | null
+  created_at: string
+  created_by_name: string | null
 }
 
 /** A text message shared to the Slack bot that is still waiting for a deal. */

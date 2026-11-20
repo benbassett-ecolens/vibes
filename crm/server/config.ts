@@ -34,6 +34,9 @@ export const config = {
   syncIntervalMinutes: int('SYNC_INTERVAL_MINUTES', 0),
   // Google Calendar sync is off unless CALENDAR_SYNC=on (meetings were more noise than signal).
   calendarSyncEnabled: env.CALENDAR_SYNC === 'on',
+  // Claude API, for the VAR news search (Settings shows "not configured" without it).
+  anthropicApiKey: env.ANTHROPIC_API_KEY ?? '',
+  aiModel: env.AI_MODEL ?? 'claude-opus-5-5',
   // Slack two-way task sync.
   slackBotToken: env.SLACK_BOT_TOKEN ?? '',
   slackSigningSecret: env.SLACK_SIGNING_SECRET ?? '',

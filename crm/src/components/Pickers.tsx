@@ -123,7 +123,7 @@ function SearchPicker<T extends { id: string }>({
   )
 }
 
-const fetchCompanies = (q: string) => api.get<{ items: Company[] }>(`/api/companies${qs({ q, limit: 20 })}`).then((r) => r.items)
+const fetchCompanies = (q: string) => api.get<{ items: Company[] }>(`/api/companies${qs({ q, kind: 'all', limit: 20 })}`).then((r) => r.items)
 export function CompanyPicker(props: { value: string | null; label?: string | null; onChange: (id: string | null, c: Company | null) => void }) {
   return <SearchPicker value={props.value} label={props.label} placeholder="Select company" fetchItems={fetchCompanies} itemLabel={(c) => c.name} onChange={props.onChange} />
 }

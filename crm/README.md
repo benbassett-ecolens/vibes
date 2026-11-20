@@ -132,6 +132,29 @@ is answered unsigned, as Slack requires). The event is stored in `slack_inbox` k
 Cloud Run gives no CPU after the response. Screenshots are downloaded with the bot token at log
 time (`files:read`), capped at 8 MB.
 
+## VARs and news search
+
+Value-added resellers get their own record type: **VARs** in the sidebar, backed by `companies.kind =
+'var'` so contacts, deals, email matching and the timeline work unchanged. The Companies page hides
+VARs; the VAR page lists them with ecosystems, contacts and notes; the company picker on deals shows
+both. Imported rows whose partner type contains "VAR" land there (migration 011 backfills).
+
+Each VAR page, and the VARs list, has a **News & research** box: type a question in plain English
+("any leadership changes this year?", "which of our VARs were acquired?") and Claude answers it with
+live web search, citing sources. Answers are saved under the question with who asked and when, so
+the team shares one research trail per VAR. Mechanics: `server/ai/news.ts` makes one Messages API
+call (`claude-opus-5-5`, override with `AI_MODEL`) with the server-side `web_search_20260209` tool,
+capped at a dozen searches, resumes `pause_turn`, and stores the text plus cited URLs in
+`company_news`. Cost is a few cents per question.
+
+Setup: create an API key at console.anthropic.com, store it as the `crm-anthropic-api-key` secret,
+and redeploy (`deploy/setup-gcp.sh` binds it to `ANTHROPIC_API_KEY` when the secret exists):
+
+```bash
+read -rsp "Anthropic API key: " K; echo; printf '%s' "$K" | gcloud secrets create crm-anthropic-api-key --data-file=- --replication-policy=automatic; unset K
+~/vibes/crm/deploy/prod.sh
+```
+
 ## Reports
 
 Every number on the Reports page respects the same filter set: pipeline, owner, **deal type**,

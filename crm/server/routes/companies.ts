@@ -18,6 +18,7 @@ const companySchema = z.object({
   ecosystems: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
   partner_type: z.string().trim().max(40).nullable().optional(),
   owner_id: z.string().uuid().nullable().optional(),
+  kind: z.enum(['company', 'var']).optional(),
 })
 
 const SORTS: Record<string, string> = {
@@ -49,6 +50,9 @@ companiesRouter.get(
     const params: unknown[] = []
     if (q.archived === 'true') where.push('c.archived_at IS NOT NULL')
     else where.push('c.archived_at IS NULL')
+    // kind: 'company' (default) | 'var' | 'all'
+    if (q.kind === 'var') where.push(`c.kind = 'var'`)
+    else if (q.kind !== 'all') where.push(`c.kind = 'company'`)
     if (typeof q.q === 'string' && q.q.trim()) {
       params.push(`%${q.q.trim()}%`)
       where.push(`(c.name ILIKE $${params.length} OR c.domain ILIKE $${params.length} OR c.industry ILIKE $${params.length})`)
@@ -94,12 +98,12 @@ companiesRouter.post(
     const body = parse(companySchema, req.body)
     const created = await withTransaction(async (client) => {
       const c = (await one<Company>(
-        `INSERT INTO companies (name, domain, website, industry, phone, address, notes, owner_id, created_by, ecosystems, partner_type)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-        [body.name, body.domain ?? null, body.website ?? null, body.industry ?? null, body.phone ?? null, body.address ?? null, body.notes ?? null, body.owner_id ?? req.user.id, req.user.id, body.ecosystems ?? [], body.partner_type ?? null],
+        `INSERT INTO companies (name, domain, website, industry, phone, address, notes, owner_id, created_by, ecosystems, partner_type, kind)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+        [body.name, body.domain ?? null, body.website ?? null, body.industry ?? null, body.phone ?? null, body.address ?? null, body.notes ?? null, body.owner_id ?? req.user.id, req.user.id, body.ecosystems ?? [], body.partner_type ?? (body.kind === 'var' ? 'VAR' : null), body.kind ?? 'company'],
         client,
       ))!
-      await audit(client, { entityType: 'company', entityId: c.id, action: 'create', actorId: req.user.id, changes: { ...body }, summary: `Created company ${c.name}` })
+      await audit(client, { entityType: 'company', entityId: c.id, action: 'create', actorId: req.user.id, changes: { ...body }, summary: `Created ${body.kind === 'var' ? 'VAR' : 'company'} ${c.name}` })
       return c
     })
     res.status(201).json(await one<Company>(`${LIST_SELECT} WHERE c.id = $1`, [created.id]))
@@ -115,9 +119,9 @@ companiesRouter.patch(
     const next = { ...before, ...body }
     await withTransaction(async (client) => {
       const after = (await one<Company>(
-        `UPDATE companies SET name = $2, domain = $3, website = $4, industry = $5, phone = $6, address = $7, notes = $8, owner_id = $9, ecosystems = $10, partner_type = $11
+        `UPDATE companies SET name = $2, domain = $3, website = $4, industry = $5, phone = $6, address = $7, notes = $8, owner_id = $9, ecosystems = $10, partner_type = $11, kind = $12
          WHERE id = $1 RETURNING *`,
-        [before.id, next.name, next.domain, next.website, next.industry, next.phone, next.address, next.notes, next.owner_id, next.ecosystems ?? [], next.partner_type],
+        [before.id, next.name, next.domain, next.website, next.industry, next.phone, next.address, next.notes, next.owner_id, next.ecosystems ?? [], next.partner_type, next.kind ?? 'company'],
         client,
       ))!
       const changes = diff(before as never, after as never)

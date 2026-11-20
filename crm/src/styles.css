@@ -333,3 +333,12 @@ table.table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .inbox-item .q { white-space: pre-wrap; color: var(--text-2); font-size: 13px; border-left: 3px solid var(--border); padding-left: 8px; }
 
 .good { color: var(--good-text, #0a6a0a); }
+
+/* VAR news */
+.news-item { padding: 10px 0; border-top: 1px solid var(--border); }
+.md p { margin: 6px 0; line-height: 1.5; }
+.md h3 { font-size: 14px; margin: 10px 0 4px; }
+.md h4 { font-size: 13px; margin: 8px 0 2px; }
+.md ul, .md ol { margin: 4px 0 6px 20px; }
+.md li { margin: 2px 0; line-height: 1.45; }
+.md code { font-size: 12px; background: var(--surface-2); padding: 1px 4px; border-radius: 4px; }
