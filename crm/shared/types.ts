@@ -205,13 +205,14 @@ export interface CompanyNews {
   created_by_name: string | null
 }
 
-/** A text message shared to the Slack bot that is still waiting for a deal. */
-export interface SlackInboxItem {
+/** A text message emailed to the log address that is still waiting for a deal. */
+export interface LogInboxItem {
   id: string
+  subject: string | null
   text: string
-  files: Array<{ id: string; name: string; mimetype: string; size: number }>
+  files: Array<{ attachment_id: string; name: string; mimetype: string; size: number }>
   status: 'pending' | 'logged' | 'dismissed'
-  created_at: string
+  received_at: string
   activity_id: string | null
   deal_id: string | null
   deal_title: string | null

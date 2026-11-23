@@ -16,6 +16,7 @@ import { dealsRouter } from './routes/deals.js'
 import { activitiesRouter } from './routes/activities.js'
 import { attachmentsRouter } from './routes/attachments.js'
 import { varsRouter } from './routes/vars.js'
+import { textlogRouter } from './routes/textlog.js'
 import { auditRouter } from './routes/audit.js'
 import { reportsRouter } from './routes/reports.js'
 import { exportsRouter } from './routes/exports.js'
@@ -73,6 +74,7 @@ export function createApp(): express.Express {
   app.use('/api/lost-reasons', lostReasonsRouter)
   app.use('/api/companies', companiesRouter)
   app.use('/api/vars', varsRouter)
+  app.use('/api/textlog', textlogRouter)
   app.use('/api/contacts', contactsRouter)
   app.use('/api/deals', dealsRouter)
   app.use('/api/products', productsRouter)

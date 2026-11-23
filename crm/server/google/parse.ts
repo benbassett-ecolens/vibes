@@ -61,13 +61,60 @@ export function uniqueExternal(parties: EmailParty[], allowedDomain: string): Em
 
 // ---------- Gmail ----------
 
+export interface GmailPart {
+  mimeType?: string
+  filename?: string
+  headers?: Array<{ name: string; value: string }>
+  body?: { attachmentId?: string; size?: number; data?: string }
+  parts?: GmailPart[]
+}
+
 export interface GmailMessage {
   id: string
   threadId: string
   labelIds?: string[]
   snippet?: string
   internalDate?: string
-  payload?: { headers?: Array<{ name: string; value: string }> }
+  payload?: GmailPart
+}
+
+function b64url(data: string): string {
+  return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')
+}
+
+/** Plain-text body of a `format: 'full'` message: text/plain if present, else text/html with tags stripped. */
+export function extractBody(m: GmailMessage): string {
+  let plain = ''
+  let html = ''
+  const walk = (p?: GmailPart) => {
+    if (!p) return
+    if (p.body?.data && !p.filename) {
+      if (p.mimeType === 'text/plain' && !plain) plain = b64url(p.body.data)
+      else if (p.mimeType === 'text/html' && !html) html = b64url(p.body.data)
+    }
+    for (const c of p.parts ?? []) walk(c)
+  }
+  walk(m.payload)
+  if (plain.trim()) return plain
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr|h\d)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+}
+
+/** Attachments of a `format: 'full'` message (anything with a filename and an attachmentId). */
+export function listAttachments(m: GmailMessage): Array<{ attachment_id: string; name: string; mimetype: string; size: number }> {
+  const out: Array<{ attachment_id: string; name: string; mimetype: string; size: number }> = []
+  const walk = (p?: GmailPart) => {
+    if (!p) return
+    if (p.filename && p.body?.attachmentId) out.push({ attachment_id: p.body.attachmentId, name: p.filename, mimetype: p.mimeType ?? 'application/octet-stream', size: p.body.size ?? 0 })
+    for (const c of p.parts ?? []) walk(c)
+  }
+  walk(m.payload)
+  return out
 }
 
 export interface ParsedEmail {

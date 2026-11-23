@@ -68,7 +68,14 @@ function ActivityRow({ a, onChanged, showDeal }: { a: Activity; onChanged?: () =
           {(a.type === 'task' || a.type === 'meeting' || a.due_at) && (
             <input type="checkbox" checked={!!a.completed_at} onChange={toggle} title={a.completed_at ? 'Reopen' : 'Mark done'} />
           )}
-          {a.source === 'gmail' ? (
+          {a.type === 'text' ? (
+            <>
+              <span className="who">{a.owner_name ?? a.created_by_name ?? 'Someone'}</span>
+              <span className="muted">logged a text message</span>
+              {a.source === 'gmail' && <span className="flag" title="Emailed to the log address">Email</span>}
+              {a.source === 'slack' && <span className="flag" title="Shared from Slack">Slack</span>}
+            </>
+          ) : a.source === 'gmail' ? (
             <>
               <span className="who">{a.meta?.direction === 'sent' ? (a.owner_name ?? 'Someone') : (a.meta?.from?.name ?? a.meta?.from?.email ?? 'Someone')}</span>
               <span className="muted">{a.meta?.direction === 'sent' ? 'sent an email to' : 'emailed'} {a.meta?.direction === 'sent' ? (a.meta?.to ?? []).map((t) => t.name ?? t.email).join(', ') : (a.owner_name ?? 'us')}</span>
@@ -85,9 +92,9 @@ function ActivityRow({ a, onChanged, showDeal }: { a: Activity; onChanged?: () =
           ) : (
             <>
               <span className="who">{a.created_by_name ?? 'Someone'}</span>
-              <span className="muted">{a.completed_at && a.type !== 'task' && a.type !== 'meeting' ? 'logged' : 'scheduled'} {a.type === 'email' ? 'an email' : a.type === 'text' ? 'a text message' : `a ${a.type}`}</span>
-              {a.type !== 'text' && <span className="subject">· {a.subject}</span>}
-              {(a.slack_ts || a.source === 'slack') && <span className="flag" title={a.source === 'slack' ? 'Shared from Slack' : 'Mirrored to Slack'}>Slack</span>}
+              <span className="muted">{a.completed_at && a.type !== 'task' && a.type !== 'meeting' ? 'logged' : 'scheduled'} {a.type === 'email' ? 'an email' : `a ${a.type}`}</span>
+              <span className="subject">· {a.subject}</span>
+              {a.slack_ts && <span className="flag" title="Mirrored to Slack">Slack</span>}
             </>
           )}
           {a.due_at && <span className={`flag ${overdue ? 'danger' : a.completed_at ? '' : 'warn'}`}>{a.completed_at ? 'done' : overdue ? 'overdue' : 'due'} {relative(a.due_at)}</span>}
@@ -106,10 +113,10 @@ function ActivityRow({ a, onChanged, showDeal }: { a: Activity; onChanged?: () =
           {showDeal && a.deal_id && <Link to={`/deals/${a.deal_id}`}>{a.deal_title ?? 'Deal'}</Link>}
           {a.contact_name && a.contact_id && <Link to={`/contacts/${a.contact_id}`}>{a.contact_name}</Link>}
           {a.company_name && a.company_id && <Link to={`/companies/${a.company_id}`}>{a.company_name}</Link>}
-          {a.external_url && <a href={a.external_url} target="_blank" rel="noreferrer">Open in {a.source === 'gmail' ? 'Gmail' : 'Calendar'} ↗</a>}
+          {a.external_url && a.type !== 'text' && <a href={a.external_url} target="_blank" rel="noreferrer">Open in {a.source === 'gmail' ? 'Gmail' : 'Calendar'} ↗</a>}
           {a.source === 'gcal' && a.meta?.conference_url && <a href={a.meta.conference_url} target="_blank" rel="noreferrer">Join call ↗</a>}
           {a.source === 'gmail' && (a.meta?.cc?.length ?? 0) > 0 && <span>cc {(a.meta?.cc ?? []).map((c) => c.email).join(', ')}</span>}
-          {onChanged && (a.source === 'manual' || a.source === 'slack') && <button className="btn ghost sm" style={{ color: 'var(--text-3)' }} onClick={remove}>delete</button>}
+          {onChanged && (a.source === 'manual' || a.source === 'slack' || a.type === 'text') && <button className="btn ghost sm" style={{ color: 'var(--text-3)' }} onClick={remove}>delete</button>}
         </div>
       </div>
     </div>

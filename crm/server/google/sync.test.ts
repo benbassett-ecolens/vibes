@@ -33,6 +33,16 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
       gmailMsg('m3', 'colleague@ecolens.io', 'rep@ecolens.io', 'Internal only', `m3-${uniq}@x`, now - 60e3),
       gmailMsg('m4', `New Person <new.person@customer-${uniq}.test>`, 'rep@ecolens.io', 'Domain match', `m4-${uniq}@x`, now - 1800e3),
       gmailMsg('m5', 'promo@linkedin.com', 'rep@ecolens.io', 'Ignored vendor', `m5-${uniq}@x`, now - 900e3),
+      // Text messages emailed in by the rep (sent copies): one names the company, one does not.
+      { ...gmailMsg('m6', `rep-${uniq}@ecolens.io`, 'log@ecolens.io', `Log: Customer ${uniq} wants pricing`, `m6-${uniq}@x`, now - 600e3), labelIds: ['SENT'],
+        payload: { headers: [{ name: 'From', value: `rep-${uniq}@ecolens.io` }, { name: 'To', value: 'log@ecolens.io' }, { name: 'Subject', value: `Log: Customer ${uniq} wants pricing` }, { name: 'Message-ID', value: `<m6-${uniq}@x>` }],
+          mimeType: 'multipart/mixed', parts: [
+            { mimeType: 'text/plain', body: { data: Buffer.from('Ann: can you send the pricing by Friday?\n\nSent from my iPhone').toString('base64url') } },
+            { mimeType: 'image/png', filename: 'IMG_1.png', body: { attachmentId: 'att-1', size: 3 } },
+          ] } },
+      { ...gmailMsg('m7', `rep-${uniq}@ecolens.io`, 'log@ecolens.io', 'Log: lunch next week', `m7-${uniq}@x`, now - 300e3), labelIds: ['SENT'],
+        payload: { headers: [{ name: 'From', value: `rep-${uniq}@ecolens.io` }, { name: 'To', value: 'log@ecolens.io' }, { name: 'Subject', value: 'Log: lunch next week' }, { name: 'Message-ID', value: `<m7-${uniq}@x>` }],
+          mimeType: 'text/plain', body: { data: Buffer.from('They said yes to lunch next week').toString('base64url') } } },
     ],
     events: [
       { id: 'ev1', iCalUID: `ev1-${uniq}@google.com`, status: 'confirmed', summary: 'Kickoff', start: { dateTime: new Date(now + 86400e3).toISOString() }, end: { dateTime: new Date(now + 90000e3).toISOString() }, attendees: [{ email: 'rep@ecolens.io', self: true }, { email: `ann-${uniq}@customer.test` }], htmlLink: 'https://cal/ev1' },
@@ -52,6 +62,7 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
         }
         return { messages: state.messages.map((m) => ({ id: m.id })) } as T
       }
+      if (url.includes('/attachments/att-1')) return { data: Buffer.from('png').toString('base64url'), size: 3 } as T
       const m = state.messages.find((x) => url.endsWith(`/messages/${x.id}`))
       if (m) return m as T
       if (url.includes('/calendars/primary/events')) {
@@ -87,7 +98,7 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
   it('logs matched emails on the deal, records unmatched senders, skips internal mail', async () => {
     const r = await syncUser(userId, 'manual', fake)
     expect(r.errors).toEqual([])
-    expect(r.gmail).toMatchObject({ logged: 2 })
+    expect(r.gmail).toMatchObject({ logged: 3 })
     const act = await one<{ deal_id: string; contact_id: string; completed_at: string | null; meta: { direction: string } }>(`SELECT * FROM activities WHERE source = 'gmail' AND external_id = $1`, [`m1-${uniq}@x`])
     expect(act?.deal_id).toBe(dealId)
     expect(act?.contact_id).toBe(contactId)
@@ -105,6 +116,16 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
     // Ignored vendor domain: neither logged nor listed as unmatched.
     expect(await one(`SELECT 1 FROM activities WHERE external_id = $1`, [`m5-${uniq}@x`])).toBeNull()
     expect(await one(`SELECT 1 FROM sync_unmatched WHERE external_id = $1`, [`m5-${uniq}@x`])).toBeNull()
+    // Emailed-in text naming the company: logged as a text activity with the screenshot, boilerplate stripped.
+    const t6 = await one<{ id: string; type: string; deal_id: string; subject: string; body: string }>(`SELECT id, type, deal_id, subject, body FROM activities WHERE external_id = $1`, [`m6-${uniq}@x`])
+    expect(t6?.type).toBe('text')
+    expect(t6?.deal_id).toBe(dealId)
+    expect(t6?.subject).toBe(`Customer ${uniq} wants pricing`)
+    expect(t6?.body).toBe('Ann: can you send the pricing by Friday?')
+    expect(await one(`SELECT 1 FROM attachments WHERE activity_id = $1 AND filename = 'IMG_1.png'`, [t6!.id])).not.toBeNull()
+    // Emailed-in text naming nobody: waits in the inbox.
+    const pending = await one<{ status: string; text: string }>(`SELECT status, text FROM log_inbox WHERE external_id = $1`, [`m7-${uniq}@x`])
+    expect(pending).toMatchObject({ status: 'pending', text: 'They said yes to lunch next week' })
     // Rotting timer reset by the customer email.
     const deal = await one<{ last_activity_at: string }>('SELECT last_activity_at FROM deals WHERE id = $1', [dealId])
     expect(new Date(deal!.last_activity_at).getTime()).toBeGreaterThan(now - 3700e3)
@@ -118,7 +139,7 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
     const past = await one<{ completed_at: string | null }>(`SELECT * FROM activities WHERE source = 'gcal' AND external_id = $1`, [`ev2-${uniq}@google.com`])
     expect(past?.completed_at).not.toBeNull()
     const runs = await query<{ kind: string; status: string; items_logged: number }>('SELECT kind, status, items_logged FROM sync_runs WHERE user_id = $1 ORDER BY id', [userId])
-    expect(runs).toEqual([{ kind: 'gmail', status: 'ok', items_logged: 2 }, { kind: 'calendar', status: 'ok', items_logged: 2 }])
+    expect(runs).toEqual([{ kind: 'gmail', status: 'ok', items_logged: 3 }, { kind: 'calendar', status: 'ok', items_logged: 2 }])
   })
 
   it('is idempotent and uses the calendar sync token; cancellations remove the meeting', async () => {

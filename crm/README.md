@@ -87,19 +87,13 @@ features:
       url: https://crm.ecolens.io/api/slack/webhooks/commands
       description: Add a to-do to the CRM
       usage_hint: "Send proposal to Acme | tomorrow 9am"
-  app_home:
-    messages_tab_enabled: true
-    messages_tab_read_only_enabled: false
 oauth_config:
   scopes:
-    bot: [chat:write, im:write, im:history, channels:history, groups:history, files:read, users:read, users:read.email, commands]
+    bot: [chat:write, im:write, users:read, users:read.email, commands]
 settings:
   interactivity:
     is_enabled: true
     request_url: https://crm.ecolens.io/api/slack/webhooks/interactions
-  event_subscriptions:
-    request_url: https://crm.ecolens.io/api/slack/webhooks/events
-    bot_events: [message.im, message.channels, message.groups]
 ```
 
 How it stays in sync: the CRM posts a Block Kit card (with the task's deal, contact, due date and a
@@ -111,26 +105,26 @@ writes the audit entry (`via: slack`) and updates the card. Slack's own "Later /
 public API, so the card-in-DM is the integration point. Users link their Slack account by email
 automatically; Settings has a "Send test DM" and "Send my open tasks to Slack" button.
 
-## Text messages from Slack
+## Text messages by email
 
-Ecolens does not own the phone numbers reps text from, so there is no carrier or WhatsApp sync;
-the rep decides what is relevant and shares it. From the phone: share the text (or a screenshot)
-to Slack → the **#crm-texts** channel (any channel the bot has been invited to; Slack's mobile
-share picker cannot target app DMs, so a channel is the destination) → send. Pasting into the bot's
-DM works too. The bot replies in a thread under the share with the deal it most likely belongs
-to as buttons (a company or contact named in the text wins, otherwise the rep's most recently
-touched open deals, own deals only) plus a dropdown of all their open deals and **Not a deal**.
-One tap creates a `text` activity on the deal (source `slack`, screenshot stored in `attachments`
-and shown on the timeline), bumps the deal's last-activity date and writes an audit entry. The card
-then offers **Add follow-up** (a modal that creates a to-do on the same deal), **Change deal** and
-**Open in CRM**. Messages never attached to a deal wait in Settings → *Text messages from Slack*.
+Ecolens does not own the phone numbers reps text from, so there is no carrier sync; the rep decides
+what is relevant and sends it in. From the phone: share the text (or a screenshot) to Mail, address
+it to the **log address** (`LOG_INBOX_ADDRESS`, default `log@ecolens.io`), put the company or
+contact name in the subject, send. Any subject starting with `log:` (or `text:` / `sms:`) counts
+too, whoever it is sent to.
 
-Only the person who shared the text (or an admin) can use its buttons. Mechanics: `message.im`,
-`message.channels` and `message.groups` events arrive at `/api/slack/webhooks/events` (signed; `url_verification`
-is answered unsigned, as Slack requires). The event is stored in `slack_inbox` keyed by Slack's
-`event_id`, so Slack's retries are no-ops, and the work is done before the 200 is sent because
-Cloud Run gives no CPU after the response. Screenshots are downloaded with the bot token at log
-time (`files:read`), capped at 8 MB.
+The Gmail sync (every 10 minutes) sees the **sent copy** in the rep's own mailbox, so the address
+does not even have to exist; to avoid bounces, make it a Google Group with "who can post: anyone in
+the organization" and no members, or an alternate email on one account. Only the sent copy is
+processed, so two mailboxes never log the same text twice.
+
+For each log email the sync fetches the full message, strips the `log:` prefix, forwarded headers
+and "Sent from my iPhone" boilerplate, keeps image and PDF attachments, and ranks the rep's open
+deals: a company, deal or contact named in the subject or body wins, otherwise most recently touched.
+A named match is logged straight away as a `text` activity (source `gmail`, screenshot stored in
+`attachments`, deal's last-activity date bumped, audit entry). Anything unnamed waits in Settings →
+*Text messages by email* with a deal dropdown. The previous Slack share-to-channel path was removed
+(migration 014 drops its table); Slack keeps the to-do sync only.
 
 ## VARs, ERPs and news search
 

@@ -57,7 +57,7 @@ export function ActivityComposer({ dealId, contactId, companyId, onCreated }: { 
         ))}
       </div>
       <div className="body">
-        <input className="input" placeholder={type === 'note' ? 'Add a note…' : type === 'task' ? 'What needs doing?' : type === 'text' ? 'What the text said (or share it to the Slack bot from your phone)' : `${type[0].toUpperCase() + type.slice(1)} subject`} value={subject} onChange={(e) => setSubject(e.target.value)} />
+        <input className="input" placeholder={type === 'note' ? 'Add a note…' : type === 'task' ? 'What needs doing?' : type === 'text' ? 'What the text said (or email it to the log address from your phone)' : `${type[0].toUpperCase() + type.slice(1)} subject`} value={subject} onChange={(e) => setSubject(e.target.value)} />
         {(type !== 'note' || body) && <textarea className="textarea" placeholder="Details (optional)" value={body} onChange={(e) => setBody(e.target.value)} style={{ minHeight: 56 }} />}
         {type === 'note' && !body && <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setBody(' ')}>+ details</button>}
         <div className="row wrap">

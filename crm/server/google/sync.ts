@@ -3,6 +3,7 @@
  * external participants to CRM contacts, and logs them as activities on the best deal.
  */
 import { config } from '../config.js'
+import { isLogEmail, processLogEmail } from '../textlog/index.js'
 import { one, query, withTransaction } from '../db.js'
 import { audit } from '../audit.js'
 import { fetcherFor, loadConnection, type ConnectionRow, type GoogleFetcher, type Params, GoogleApiError } from './client.js'
@@ -218,7 +219,8 @@ export async function syncGmail(conn: ConnectionRow, api: GoogleFetcher, trigger
     const known = new Set(
       (await query<{ external_id: string }>(
         `SELECT external_id FROM activities WHERE source = 'gmail' AND meta->>'synced_by' = $1::text AND created_at >= $2
-         UNION SELECT external_id FROM sync_unmatched WHERE source = 'gmail' AND user_id = $1::uuid AND occurred_at >= $2`,
+         UNION SELECT external_id FROM sync_unmatched WHERE source = 'gmail' AND user_id = $1::uuid AND occurred_at >= $2
+         UNION SELECT external_id FROM log_inbox WHERE user_id = $1::uuid AND received_at >= $2`,
         [conn.user_id, since.toISOString()],
       )).map((r) => r.external_id),
     )
@@ -231,6 +233,13 @@ export async function syncGmail(conn: ConnectionRow, api: GoogleFetcher, trigger
       const m = await api.get<GmailMessage>(`${GMAIL}/messages/${id}`, { format: 'metadata', metadataHeaders: ['From', 'To', 'Cc', 'Subject', 'Date', 'Message-ID'] })
       const parsed = parseGmailMessage(m, conn.google_email, config.allowedDomain)
       if (known.has(parsed.message_id)) continue
+      if (isLogEmail(parsed)) {
+        // A text message the rep emailed in: only the sent copy counts, so two mailboxes never log it twice.
+        if (parsed.direction !== 'sent') continue
+        const r = await processLogEmail(conn.user_id, api, parsed)
+        if (r === 'logged') stats.logged++
+        continue
+      }
       if (!parsed.external.length) continue // purely internal thread
       const r = await logEmail(conn.user_id, { ...parsed })
       if (r === 'logged') {
