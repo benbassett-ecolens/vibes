@@ -34,14 +34,14 @@ describe.skipIf(!HAS_DB)('google sync (db)', async () => {
       gmailMsg('m4', `New Person <new.person@customer-${uniq}.test>`, 'rep@ecolens.io', 'Domain match', `m4-${uniq}@x`, now - 1800e3),
       gmailMsg('m5', 'promo@linkedin.com', 'rep@ecolens.io', 'Ignored vendor', `m5-${uniq}@x`, now - 900e3),
       // Text messages emailed in by the rep (sent copies): one names the company, one does not.
-      { ...gmailMsg('m6', `rep-${uniq}@ecolens.io`, 'log@ecolens.io', `Log: Customer ${uniq} wants pricing`, `m6-${uniq}@x`, now - 600e3), labelIds: ['SENT'],
-        payload: { headers: [{ name: 'From', value: `rep-${uniq}@ecolens.io` }, { name: 'To', value: 'log@ecolens.io' }, { name: 'Subject', value: `Log: Customer ${uniq} wants pricing` }, { name: 'Message-ID', value: `<m6-${uniq}@x>` }],
+      { ...gmailMsg('m6', `rep-${uniq}@ecolens.io`, 'crmlog@ecolens.io', `Log: Customer ${uniq} wants pricing`, `m6-${uniq}@x`, now - 600e3), labelIds: ['SENT'],
+        payload: { headers: [{ name: 'From', value: `rep-${uniq}@ecolens.io` }, { name: 'To', value: 'crmlog@ecolens.io' }, { name: 'Subject', value: `Log: Customer ${uniq} wants pricing` }, { name: 'Message-ID', value: `<m6-${uniq}@x>` }],
           mimeType: 'multipart/mixed', parts: [
             { mimeType: 'text/plain', body: { data: Buffer.from('Ann: can you send the pricing by Friday?\n\nSent from my iPhone').toString('base64url') } },
             { mimeType: 'image/png', filename: 'IMG_1.png', body: { attachmentId: 'att-1', size: 3 } },
           ] } },
-      { ...gmailMsg('m7', `rep-${uniq}@ecolens.io`, 'log@ecolens.io', 'Log: lunch next week', `m7-${uniq}@x`, now - 300e3), labelIds: ['SENT'],
-        payload: { headers: [{ name: 'From', value: `rep-${uniq}@ecolens.io` }, { name: 'To', value: 'log@ecolens.io' }, { name: 'Subject', value: 'Log: lunch next week' }, { name: 'Message-ID', value: `<m7-${uniq}@x>` }],
+      { ...gmailMsg('m7', `rep-${uniq}@ecolens.io`, 'crmlog@ecolens.io', 'Log: lunch next week', `m7-${uniq}@x`, now - 300e3), labelIds: ['SENT'],
+        payload: { headers: [{ name: 'From', value: `rep-${uniq}@ecolens.io` }, { name: 'To', value: 'crmlog@ecolens.io' }, { name: 'Subject', value: 'Log: lunch next week' }, { name: 'Message-ID', value: `<m7-${uniq}@x>` }],
           mimeType: 'text/plain', body: { data: Buffer.from('They said yes to lunch next week').toString('base64url') } } },
     ],
     events: [

@@ -109,14 +109,14 @@ automatically; Settings has a "Send test DM" and "Send my open tasks to Slack" b
 
 Ecolens does not own the phone numbers reps text from, so there is no carrier sync; the rep decides
 what is relevant and sends it in. From the phone: share the text (or a screenshot) to Mail, address
-it to the **log address** (`LOG_INBOX_ADDRESS`, default `log@ecolens.io`), put the company or
+it to the **log address** (`LOG_INBOX_ADDRESS`, default `crmlog@ecolens.io`), put the company or
 contact name in the subject, send. Any subject starting with `log:` (or `text:` / `sms:`) counts
 too, whoever it is sent to.
 
-The Gmail sync (every 10 minutes) sees the **sent copy** in the rep's own mailbox, so the address
-does not even have to exist; to avoid bounces, make it a Google Group with "who can post: anyone in
-the organization" and no members, or an alternate email on one account. Only the sent copy is
-processed, so two mailboxes never log the same text twice.
+The Gmail sync (every 10 minutes) processes the **sent copy** in the rep's own mailbox, so the rep
+must have Gmail connected in Settings. `crmlog@ecolens.io` is a Google Group the sales team belongs
+to, which doubles as a shared feed of what everyone is texting prospects; the copies that arrive in
+other members' inboxes are recognised and skipped, so a text is never logged twice.
 
 For each log email the sync fetches the full message, strips the `log:` prefix, forwarded headers
 and "Sent from my iPhone" boilerplate, keeps image and PDF attachments, and ranks the rep's open

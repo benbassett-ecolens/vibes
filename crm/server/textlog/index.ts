@@ -2,7 +2,7 @@
  * Text messages logged by email.
  *
  * Reps share a text (or a screenshot of one) from their phone to Mail, addressed to the log address
- * (LOG_INBOX_ADDRESS, default log@<domain>), or put "log:" at the start of the subject. The Gmail sync
+ * (LOG_INBOX_ADDRESS, default crmlog@<domain>), or put "log:" at the start of the subject. The Gmail sync
  * sees the sent copy in their own mailbox, pulls the full body, and attaches it to the deal named in the
  * subject or body. Anything it cannot place waits in Settings → "Text messages emailed in".
  */
@@ -42,7 +42,7 @@ const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me'
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
 
 export function logAddress(): string {
-  return (config.logInboxAddress || `log@${config.allowedDomain}`).toLowerCase()
+  return (config.logInboxAddress || `crmlog@${config.allowedDomain}`).toLowerCase()
 }
 
 /** Addressed to the log address, or subject starts with "log:" / "log -" / "log –". */
