@@ -37,9 +37,12 @@ AUDIT_RETENTION_MONTHS="${AUDIT_RETENTION_MONTHS:-12}"
 gcloud config set project "$PROJECT_ID" >/dev/null
 
 echo "▶ Enabling APIs"
-gcloud services enable run.googleapis.com sqladmin.googleapis.com secretmanager.googleapis.com \
-  artifactregistry.googleapis.com cloudbuild.googleapis.com compute.googleapis.com cloudscheduler.googleapis.com \
-  gmail.googleapis.com calendar-json.googleapis.com >/dev/null
+# Only enable what is missing: `services enable` counts against a 120/min mutate quota even when nothing changes.
+NEEDED="run.googleapis.com sqladmin.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com compute.googleapis.com cloudscheduler.googleapis.com gmail.googleapis.com calendar-json.googleapis.com"
+ENABLED="$(gcloud services list --enabled --format='value(config.name)' 2>/dev/null || true)"
+MISSING=""
+for api in $NEEDED; do echo "$ENABLED" | grep -qx "$api" || MISSING="$MISSING $api"; done
+if [ -n "$MISSING" ]; then gcloud services enable $MISSING >/dev/null; else echo "  all enabled"; fi
 
 echo "▶ Artifact Registry repo: $REPO"
 gcloud artifacts repositories describe "$REPO" --location="$REGION" >/dev/null 2>&1 || \
@@ -148,7 +151,6 @@ MSG
 fi
 
 echo "▶ Cloud Scheduler: Gmail/Calendar sync + maintenance every '$SYNC_SCHEDULE'"
-gcloud services enable cloudscheduler.googleapis.com >/dev/null
 SERVICE_URL="$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
 SYNC_SECRET_VALUE="$(gcloud secrets versions access latest --secret=crm-sync-secret)"
 if gcloud scheduler jobs describe "$SCHED_JOB" --location="$REGION" >/dev/null 2>&1; then
