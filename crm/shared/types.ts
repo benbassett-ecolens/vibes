@@ -55,7 +55,7 @@ export interface Company {
   notes: string | null
   ecosystems: string[]
   partner_type: string | null
-  kind: 'company' | 'var'
+  kind: CompanyKind
   owner_id: string | null
   owner_name?: string | null
   created_by: string | null
@@ -184,11 +184,19 @@ export interface Attachment {
   size: number
 }
 
-/** A news question about a VAR (or all VARs) answered by Claude with web search. */
+export type CompanyKind = 'company' | 'var' | 'erp'
+export const COMPANY_KIND_LABEL: Record<CompanyKind, { one: string; many: string; sub: string; path: string }> = {
+  company: { one: 'company', many: 'Companies', sub: 'customers and prospects', path: '/companies' },
+  var: { one: 'VAR', many: 'VARs', sub: 'value-added resellers', path: '/vars' },
+  erp: { one: 'ERP', many: 'ERPs', sub: 'ERP publishers', path: '/erps' },
+}
+
+/** A news question about a VAR/ERP (or all of them) answered by Claude with web search. */
 export interface CompanyNews {
   id: string
   company_id: string | null
   company_name: string | null
+  scope_kind: CompanyKind
   question: string
   answer: string // Markdown
   sources: Array<{ url: string; title: string | null }>

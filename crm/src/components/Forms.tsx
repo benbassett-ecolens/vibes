@@ -7,8 +7,8 @@ import { Field, Modal, useToast } from './ui'
 import { toLocalInputDateTime, fromLocalInputDateTime } from '../format'
 import { DEAL_TYPES, DEAL_TYPE_LABEL } from '../../shared/pricing'
 import { CompanyPicker, ContactPicker, OwnerSelect } from './Pickers'
-import type { Company, Contact, Deal, ContactInfluence } from '../../shared/types'
-import { INFLUENCE_LABEL } from '../../shared/types'
+import type { Company, CompanyKind, Contact, Deal, ContactInfluence } from '../../shared/types'
+import { COMPANY_KIND_LABEL, INFLUENCE_LABEL } from '../../shared/types'
 
 export function DealForm({ initial, onClose, onSaved, defaults }: { initial?: Deal; onClose: () => void; onSaved: (d: Deal) => void; defaults?: Partial<Deal> }) {
   const { pipelines } = useRefData()
@@ -228,9 +228,9 @@ export function ContactForm({ initial, onClose, onSaved, defaults }: { initial?:
   )
 }
 
-export function CompanyForm({ initial, kind, onClose, onSaved }: { initial?: Company; kind?: 'company' | 'var'; onClose: () => void; onSaved: (c: Company) => void }) {
-  const recordKind = initial?.kind ?? kind ?? 'company'
-  const label = recordKind === 'var' ? 'VAR' : 'company'
+export function CompanyForm({ initial, kind, onClose, onSaved }: { initial?: Company; kind?: CompanyKind; onClose: () => void; onSaved: (c: Company) => void }) {
+  const recordKind: CompanyKind = initial?.kind ?? kind ?? 'company'
+  const label = COMPANY_KIND_LABEL[recordKind].one
   const { user } = useAuth()
   const toast = useToast()
   const [form, setForm] = useState({
@@ -243,7 +243,7 @@ export function CompanyForm({ initial, kind, onClose, onSaved }: { initial?: Com
     owner_id: initial?.owner_id ?? user?.id ?? null,
     notes: initial?.notes ?? '',
     ecosystems: (initial?.ecosystems ?? []).join(', '),
-    partner_type: initial?.partner_type ?? (kind === 'var' ? 'VAR' : ''),
+    partner_type: initial?.partner_type ?? (kind === 'var' ? 'VAR' : kind === 'erp' ? 'ERP' : ''),
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -255,7 +255,7 @@ export function CompanyForm({ initial, kind, onClose, onSaved }: { initial?: Com
     try {
       const body = { name: form.name, domain: form.domain || null, website: form.website || null, industry: form.industry || null, phone: form.phone || null, address: form.address || null, owner_id: form.owner_id, notes: form.notes || null, ecosystems: form.ecosystems.split(',').map((x) => x.trim()).filter(Boolean), partner_type: form.partner_type || null, kind: recordKind }
       const c = initial ? await api.patch<Company>(`/api/companies/${initial.id}`, body) : await api.post<Company>('/api/companies', body)
-      toast(initial ? `${label === 'VAR' ? 'VAR' : 'Company'} updated` : `${label === 'VAR' ? 'VAR' : 'Company'} created`)
+      toast(initial ? `${label[0].toUpperCase()}${label.slice(1)} updated` : `${label[0].toUpperCase()}${label.slice(1)} created`)
       onSaved(c)
     } catch (err) {
       setError((err as Error).message)
@@ -276,7 +276,7 @@ export function CompanyForm({ initial, kind, onClose, onSaved }: { initial?: Com
           <Field label="Ecosystems (comma-separated)"><input className="input" list="ecosystem-options" placeholder="Microsoft, Acumatica, NetSuite" value={form.ecosystems} onChange={(e) => set({ ecosystems: e.target.value })} /><datalist id="ecosystem-options"><option value="Microsoft" /><option value="Acumatica" /><option value="NetSuite" /><option value="Sage" /><option value="SAP-B1" /><option value="Other" /></datalist></Field>
           <Field label="Partner type">
             <select className="select" value={form.partner_type} onChange={(e) => set({ partner_type: e.target.value })}>
-              <option value="">—</option><option value="ISV">ISV</option><option value="VAR">VAR</option><option value="ISV, VAR">ISV, VAR</option><option value="Other">Other</option>
+              <option value="">—</option><option value="ISV">ISV</option><option value="VAR">VAR</option><option value="ISV, VAR">ISV, VAR</option><option value="ERP">ERP publisher</option><option value="Other">Other</option>
             </select>
           </Field>
           <Field label="Owner"><OwnerSelect value={form.owner_id} onChange={(id) => set({ owner_id: id })} /></Field>

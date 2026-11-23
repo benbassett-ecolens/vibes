@@ -11,7 +11,7 @@ import { DealDetail } from './pages/DealDetail'
 import { ContactsPage } from './pages/Contacts'
 import { ContactDetail } from './pages/ContactDetail'
 import { CompaniesPage } from './pages/Companies'
-import { VarsPage } from './pages/Vars'
+import { PartnersPage } from './pages/Partners'
 import { CompanyDetail } from './pages/CompanyDetail'
 import { ActivitiesPage } from './pages/Activities'
 import { ReportsPage } from './pages/Reports'
@@ -23,6 +23,7 @@ const NAV = [
   { to: '/contacts', label: 'Contacts', ico: '◉' },
   { to: '/companies', label: 'Companies', ico: '▣' },
   { to: '/vars', label: 'VARs', ico: '◈' },
+  { to: '/erps', label: 'ERPs', ico: '◇' },
   { to: '/activities', label: 'Tasks & activity', ico: '✓' },
   { to: '/reports', label: 'Reports', ico: '▥' },
   { to: '/settings', label: 'Settings', ico: '⚙' },
@@ -98,8 +99,10 @@ function Shell() {
             <Route path="/contacts/:id" element={<ContactDetail />} />
             <Route path="/companies" element={<CompaniesPage />} />
             <Route path="/companies/:id" element={<CompanyDetail />} />
-            <Route path="/vars" element={<VarsPage />} />
+            <Route path="/vars" element={<PartnersPage kind="var" />} />
             <Route path="/vars/:id" element={<CompanyDetail />} />
+            <Route path="/erps" element={<PartnersPage kind="erp" />} />
+            <Route path="/erps/:id" element={<CompanyDetail />} />
             <Route path="/activities" element={<ActivitiesPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/settings" element={<SettingsPage />} />

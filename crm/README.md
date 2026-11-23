@@ -132,10 +132,11 @@ is answered unsigned, as Slack requires). The event is stored in `slack_inbox` k
 Cloud Run gives no CPU after the response. Screenshots are downloaded with the bot token at log
 time (`files:read`), capped at 8 MB.
 
-## VARs and news search
+## VARs, ERPs and news search
 
-Value-added resellers get their own record type: **VARs** in the sidebar, backed by `companies.kind =
-'var'` so contacts, deals, email matching and the timeline work unchanged. The Companies page hides
+Value-added resellers and ERP publishers get their own record types: **VARs** and **ERPs** in the
+sidebar, backed by `companies.kind = 'var' | 'erp'` so contacts, deals, email matching, the org chart
+and the timeline work unchanged. The Companies page hides
 VARs; the VAR page lists them with ecosystems, contacts and notes; the company picker on deals shows
 both. Imported rows whose partner type contains "VAR" land there (migration 011 backfills).
 

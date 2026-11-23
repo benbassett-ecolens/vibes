@@ -40,10 +40,12 @@ const SYSTEM = `You are a research assistant inside Ecolens's CRM. Ecolens sells
 and the EcoNet partner network to value-added resellers (VARs) and ISVs in the Microsoft Dynamics, Acumatica,
 NetSuite, Sage and SAP Business One ecosystems.
 
-The user asks about one or more VARs that Ecolens works with or is prospecting. Use web search to find
-current, relevant news: acquisitions, mergers, funding, leadership changes, new partnerships, product
-launches, awards, hiring, layoffs, office openings, events they are sponsoring, and anything that changes
-how Ecolens should approach them. Prefer the last 12 months. Prefer primary sources (the company's own site,
+The user asks about one or more companies Ecolens works with or is prospecting: either VARs (resellers and
+implementation partners) or ERP publishers (the software vendors whose ecosystems those partners sell
+into). Use web search to find current, relevant news: acquisitions, mergers, funding, leadership changes,
+new partnerships, product launches and releases, pricing or licensing changes, partner-program changes,
+awards, hiring, layoffs, office openings, events they are sponsoring, and anything that changes how Ecolens
+should approach them. Prefer the last 12 months. Prefer primary sources (the company's own site,
 press releases, trade press) over aggregators.
 
 Answer in plain Markdown. Lead with the most useful finding. Give dates. Group by company when asked about
@@ -89,11 +91,11 @@ export function toHttpError(e: unknown): Error {
   return e instanceof Error ? e : new Error(String(e))
 }
 
-export async function askNews(question: string, companies: NewsCompany[]): Promise<NewsAnswer> {
+export async function askNews(question: string, companies: NewsCompany[], kind: 'var' | 'erp' = 'var'): Promise<NewsAnswer> {
   if (!aiConfigured()) throw new Error('ANTHROPIC_API_KEY is not configured')
   const api = getClient()
   const model = config.aiModel
-  const user = `Companies:\n${describeCompanies(companies)}\n\nToday is ${new Date().toISOString().slice(0, 10)}.\n\nQuestion: ${question}`
+  const user = `${kind === 'erp' ? 'ERP publishers' : 'VARs'}:\n${describeCompanies(companies)}\n\nToday is ${new Date().toISOString().slice(0, 10)}.\n\nQuestion: ${question}`
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: user }]
   const params = {
     model,
