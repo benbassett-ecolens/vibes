@@ -155,6 +155,16 @@ read -rsp "Anthropic API key: " K; echo; printf '%s' "$K" | gcloud secrets creat
 ~/vibes/crm/deploy/prod.sh
 ```
 
+## Organization chart
+
+Every company and VAR page has an **Organization** card: a top-down chart of its contacts built from
+`contacts.reports_to_id`, with each person's title, department and role in the buying decision
+(decision maker, champion, influencer, blocker, user; the card's top edge is coloured by role).
+**Edit chart** turns each box into two dropdowns (reports to, role) that save immediately; the
+contact form has the same fields. The server refuses self-reports, managers at another company
+and reporting loops. People with no manager sit at the top level, so a company with no lines set
+simply shows a row of boxes.
+
 ## Reports
 
 Every number on the Reports page respects the same filter set: pipeline, owner, **deal type**,

@@ -6,8 +6,9 @@ import { useQuery } from '../hooks'
 import { ActivityComposer } from '../components/ActivityComposer'
 import { CompanyForm, ContactForm, DealForm } from '../components/Forms'
 import { Timeline } from '../components/Timeline'
-import { Avatar, ConfirmButton, useToast } from '../components/ui'
+import { ConfirmButton, useToast } from '../components/ui'
 import { NewsCard } from '../components/News'
+import { OrgChart } from '../components/OrgChart'
 import type { Activity, AuditEntry, Company, Contact, Deal, Paged, TimelineItem } from '../../shared/types'
 
 export function CompanyDetail() {
@@ -52,6 +53,7 @@ export function CompanyDetail() {
       <div className="content detail-layout">
         <div className="grid">
           {c.kind === 'var' && <NewsCard companyId={c.id} />}
+          <OrgChart contacts={contacts.data?.items ?? []} onChanged={refreshAll} onAdd={() => setNewContact(true)} />
           <ActivityComposer companyId={c.id} onCreated={refreshAll} />
           <div className="card">
             <div className="card-h"><h2>Timeline</h2></div>
@@ -76,18 +78,6 @@ export function CompanyDetail() {
                 <dt>Updated</dt><dd>{fmtDateTime(c.updated_at)}</dd>
               </dl>
               {c.notes && <p className="small" style={{ marginTop: 12, whiteSpace: 'pre-wrap' }}>{c.notes}</p>}
-            </div>
-          </div>
-          <div className="card">
-            <div className="card-h"><h2>Contacts</h2><span className="muted small right">{contacts.data?.total ?? 0}</span></div>
-            <div className="card-b" style={{ padding: 0 }}>
-              {(contacts.data?.items ?? []).map((ct) => (
-                <Link key={ct.id} to={`/contacts/${ct.id}`} className="row" style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', color: 'inherit' }}>
-                  <Avatar name={`${ct.first_name} ${ct.last_name}`} />
-                  <span className="grow truncate">{ct.first_name} {ct.last_name}<span className="muted small"> {ct.title ? `· ${ct.title}` : ''}</span></span>
-                </Link>
-              ))}
-              {!contacts.data?.items.length && <div className="empty small">No contacts</div>}
             </div>
           </div>
           <div className="card">

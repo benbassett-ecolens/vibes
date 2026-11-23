@@ -8,6 +8,7 @@ import { ContactForm, DealForm } from '../components/Forms'
 import { Timeline } from '../components/Timeline'
 import { Avatar, ConfirmButton, useToast } from '../components/ui'
 import type { Activity, AuditEntry, Contact, Deal, Paged, TimelineItem } from '../../shared/types'
+import { INFLUENCE_LABEL } from '../../shared/types'
 
 export function ContactDetail() {
   const { id } = useParams()
@@ -56,7 +57,9 @@ export function ContactDetail() {
             <div className="card-h"><h2>Details</h2></div>
             <div className="card-b">
               <dl className="kv">
-                <dt>Title</dt><dd>{c.title ?? '—'}</dd>
+                <dt>Title</dt><dd>{c.title ?? '—'}{c.department ? <span className="muted"> · {c.department}</span> : ''}</dd>
+                <dt>Reports to</dt><dd>{c.reports_to_id ? <Link to={`/contacts/${c.reports_to_id}`}>{c.reports_to_name}</Link> : '—'}{(c.report_count ?? 0) > 0 && <span className="muted small"> · {c.report_count} direct report{c.report_count === 1 ? '' : 's'}</span>}</dd>
+                <dt>Buying role</dt><dd>{c.influence ? INFLUENCE_LABEL[c.influence] : '—'}</dd>
                 <dt>Company</dt><dd>{c.company_id ? <Link to={`/companies/${c.company_id}`}>{c.company_name}</Link> : '—'}</dd>
                 <dt>Email</dt><dd>{c.email ? <a href={`mailto:${c.email}`}>{c.email}</a> : '—'}</dd>
                 <dt>Phone</dt><dd>{c.phone ?? '—'}</dd>

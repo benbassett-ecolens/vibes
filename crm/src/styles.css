@@ -342,3 +342,25 @@ table.table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .md ul, .md ol { margin: 4px 0 6px 20px; }
 .md li { margin: 2px 0; line-height: 1.45; }
 .md code { font-size: 12px; background: var(--surface-2); padding: 1px 4px; border-radius: 4px; }
+
+/* org chart: top-down tree with connectors */
+.org-tree, .org-tree ul { display: flex; justify-content: center; list-style: none; margin: 0; padding: 18px 0 0; position: relative; }
+.org-tree { padding-top: 0; min-width: max-content; }
+.org-tree ul::before { content: ''; position: absolute; top: 0; left: 50%; width: 1px; height: 18px; background: var(--border-strong); }
+.org-tree li { position: relative; padding: 18px 6px 0; text-align: center; }
+.org-tree > li { padding-top: 0; }
+.org-tree li::before, .org-tree li::after { content: ''; position: absolute; top: 0; right: 50%; width: 50%; height: 18px; border-top: 1px solid var(--border-strong); }
+.org-tree li::after { right: auto; left: 50%; border-left: 1px solid var(--border-strong); }
+.org-tree li:only-child::before, .org-tree li:only-child::after { border-top: 0; }
+.org-tree li:only-child { padding-top: 18px; }
+.org-tree li:first-child::before, .org-tree li:last-child::after { border: 0 none; }
+.org-tree li:last-child::before { border-right: 1px solid var(--border-strong); border-radius: 0 6px 0 0; }
+.org-tree li:first-child::after { border-radius: 6px 0 0 0; }
+.org-tree > li::before, .org-tree > li::after { display: none; }
+.org-node { display: inline-block; text-align: left; min-width: 180px; max-width: 220px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); border-top-width: 3px; }
+.org-node .org-name { display: block; font-weight: 600; font-size: 13px; }
+.org-node .org-title { display: block; font-size: 12px; color: var(--text-2); }
+.org-node .org-inf { display: inline-block; margin-top: 4px; font-size: 11px; padding: 0 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); }
+.org-node.inf-dm { border-top-color: #1baf7a; } .org-node.inf-champ { border-top-color: #2a78d6; } .org-node.inf-inf { border-top-color: #e0a300; } .org-node.inf-block { border-top-color: #e34948; } .org-node.inf-user { border-top-color: var(--border-strong); }
+.org-edit { display: grid; gap: 4px; margin-top: 6px; }
+.org-edit .select { width: 100%; font-size: 12px; }

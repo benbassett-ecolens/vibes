@@ -85,7 +85,15 @@ export interface Contact {
   updated_at: string
   archived_at: string | null
   last_activity_at?: string | null
+  reports_to_id: string | null
+  reports_to_name?: string | null
+  report_count?: number
+  department: string | null
+  influence: ContactInfluence | null
 }
+
+export type ContactInfluence = 'decision_maker' | 'champion' | 'influencer' | 'blocker' | 'user'
+export const INFLUENCE_LABEL: Record<ContactInfluence, string> = { decision_maker: 'Decision maker', champion: 'Champion', influencer: 'Influencer', blocker: 'Blocker', user: 'User' }
 
 export interface Deal {
   id: string

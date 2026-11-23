@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQuery } from '../hooks'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { useRefData } from '../refdata'
@@ -6,7 +7,8 @@ import { Field, Modal, useToast } from './ui'
 import { toLocalInputDateTime, fromLocalInputDateTime } from '../format'
 import { DEAL_TYPES, DEAL_TYPE_LABEL } from '../../shared/pricing'
 import { CompanyPicker, ContactPicker, OwnerSelect } from './Pickers'
-import type { Company, Contact, Deal } from '../../shared/types'
+import type { Company, Contact, Deal, ContactInfluence } from '../../shared/types'
+import { INFLUENCE_LABEL } from '../../shared/types'
 
 export function DealForm({ initial, onClose, onSaved, defaults }: { initial?: Deal; onClose: () => void; onSaved: (d: Deal) => void; defaults?: Partial<Deal> }) {
   const { pipelines } = useRefData()
@@ -153,11 +155,15 @@ export function ContactForm({ initial, onClose, onSaved, defaults }: { initial?:
     company_name: base?.company_name ?? null,
     owner_id: base?.owner_id ?? user?.id ?? null,
     notes: base?.notes ?? '',
+    reports_to_id: base?.reports_to_id ?? null,
+    department: base?.department ?? '',
+    influence: (base?.influence ?? '') as string,
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [suggestion, setSuggestion] = useState<{ company_id: string; company_name: string; score: number } | null>(null)
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }))
+  const colleagues = useQuery(() => (form.company_id ? api.get<{ items: Contact[] }>(`/api/contacts?company_id=${form.company_id}&limit=200`).then((r) => r.items.filter((c) => c.id !== initial?.id)) : Promise.resolve([] as Contact[])), [form.company_id, initial?.id])
   const suggestCompany = () => {
     if (!form.email.includes('@')) return
     api.get<{ items: Array<{ company_id: string; company_name: string; score: number }> }>(`/api/contacts/suggest-company?email=${encodeURIComponent(form.email)}`).then((r) => {
@@ -171,7 +177,7 @@ export function ContactForm({ initial, onClose, onSaved, defaults }: { initial?:
     setBusy(true)
     setError(null)
     try {
-      const body = { first_name: form.first_name, last_name: form.last_name, email: form.email || null, phone: form.phone || null, title: form.title || null, company_id: form.company_id, owner_id: form.owner_id, notes: form.notes || null }
+      const body = { first_name: form.first_name, last_name: form.last_name, email: form.email || null, phone: form.phone || null, title: form.title || null, company_id: form.company_id, owner_id: form.owner_id, notes: form.notes || null, reports_to_id: form.reports_to_id, department: form.department || null, influence: (form.influence || null) as ContactInfluence | null }
       const c = initial ? await api.patch<Contact>(`/api/contacts/${initial.id}`, body) : await api.post<Contact>('/api/contacts', body)
       toast(initial ? 'Contact updated' : 'Contact created')
       onSaved(c)
@@ -197,6 +203,19 @@ export function ContactForm({ initial, onClose, onSaved, defaults }: { initial?:
             {suggestion && !form.company_id && <span className="small muted">Suggested from the email domain: <a href="#" onClick={(e) => { e.preventDefault(); set({ company_id: suggestion.company_id, company_name: suggestion.company_name }) }}>{suggestion.company_name}</a> ({Math.round(suggestion.score * 100)}%)</span>}
           </Field>
           <Field label="Owner"><OwnerSelect value={form.owner_id} onChange={(id) => set({ owner_id: id })} /></Field>
+          <Field label="Department"><input className="input" list="department-options" placeholder="Sales, Services, Leadership…" value={form.department} onChange={(e) => set({ department: e.target.value })} /><datalist id="department-options"><option value="Leadership" /><option value="Sales" /><option value="Marketing" /><option value="Services" /><option value="Support" /><option value="Finance" /><option value="Operations" /><option value="Product" /></datalist></Field>
+          <Field label="Reports to">
+            <select className="select" value={form.reports_to_id ?? ''} onChange={(e) => set({ reports_to_id: e.target.value || null })} disabled={!form.company_id}>
+              <option value="">{form.company_id ? 'Nobody (top of chart)' : 'Pick a company first'}</option>
+              {(colleagues.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}{c.title ? ` · ${c.title}` : ''}</option>)}
+            </select>
+          </Field>
+          <Field label="Role in buying decision">
+            <select className="select" value={form.influence} onChange={(e) => set({ influence: e.target.value })}>
+              <option value="">—</option>
+              {(Object.keys(INFLUENCE_LABEL) as ContactInfluence[]).map((k) => <option key={k} value={k}>{INFLUENCE_LABEL[k]}</option>)}
+            </select>
+          </Field>
           <Field label="Notes" span2><textarea className="textarea" value={form.notes} onChange={(e) => set({ notes: e.target.value })} /></Field>
         </div>
         {error && <p className="error" style={{ marginTop: 10 }}>{error}</p>}
