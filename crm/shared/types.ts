@@ -137,6 +137,8 @@ export interface Deal {
   archived_at: string | null
   // derived for the board
   next_activity_at?: string | null
+  next_activity_subject?: string | null
+  stage_color?: string | null
   overdue_task_count?: number
   open_task_count?: number
   weighted_amount?: number

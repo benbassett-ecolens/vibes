@@ -150,6 +150,20 @@ read -rsp "Anthropic API key: " K; echo; printf '%s' "$K" | gcloud secrets creat
 ~/vibes/crm/deploy/prod.sh
 ```
 
+## Mobile view
+
+`/m` is a phone-first version of the CRM for show floors: same login, same API, same data, no
+sidebar. A phone landing on `/` is sent there (add `?desktop=1` to stay on the full app); the
+desktop sidebar has a *Mobile view* link. Screens: **Home** (search deals, companies and people;
+my deals most recent first; what is due today), **Log** (pick a deal, company or person, tap
+note/meeting/call/text, type, optional next step with tap-to-pick dates), **New deal** (company
+search-or-create, contact search-or-create, lead source chips defaulting to Event, type, amount,
+expected close defaulting to +90 days, follow-up task defaulting to "Follow up after the show" in
+2 days, optional first note: three typed fields and one tap), **Deal** (stage change, log a note,
+recent activity with tap-to-complete) and **New contact**. The site is installable: a web app
+manifest and a small service worker cache the app shell, so Add to Home Screen gives a one-tap
+icon that opens straight to `/m`. API calls are never cached and nothing is queued offline.
+
 ## Organization chart
 
 Every company and VAR page has an **Organization** card: a top-down chart of its contacts built from

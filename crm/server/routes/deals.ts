@@ -78,6 +78,8 @@ export const DEAL_SELECT = `
                                               ELSE dp.quantity * dp.unit_price END), 0)
        FROM deal_products dp WHERE dp.deal_id = d.id) AS contract_value,
     (SELECT MIN(a.due_at) FROM activities a WHERE a.deal_id = d.id AND a.completed_at IS NULL AND a.due_at IS NOT NULL) AS next_activity_at,
+    (SELECT a.subject FROM activities a WHERE a.deal_id = d.id AND a.completed_at IS NULL AND a.due_at IS NOT NULL ORDER BY a.due_at LIMIT 1) AS next_activity_subject,
+    s.color AS stage_color,
     (SELECT COUNT(*)::int FROM activities a WHERE a.deal_id = d.id AND a.completed_at IS NULL AND a.due_at IS NOT NULL AND a.due_at < now()) AS overdue_task_count,
     (SELECT COUNT(*)::int FROM activities a WHERE a.deal_id = d.id AND a.completed_at IS NULL AND a.type = 'task') AS open_task_count
   FROM deals d

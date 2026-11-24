@@ -1,0 +1,13 @@
+{
+  "name": "Ecolens CRM",
+  "short_name": "Ecolens CRM",
+  "start_url": "/m",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f5f3",
+  "theme_color": "#1f7a4d",
+  "icons": [
+    { "src": "/brand/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

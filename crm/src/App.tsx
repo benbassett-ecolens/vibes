@@ -1,4 +1,5 @@
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { MobileShell } from './mobile/Mobile'
 import { AuthProvider, LoginPage, useAuth } from './auth'
 import { Avatar, ToastProvider } from './components/ui'
 import { RefProvider } from './refdata'
@@ -63,9 +64,20 @@ function EnvBanner() {
 
 function Shell() {
   const { user, loading, logout } = useAuth()
+  const location = useLocation()
   useTheme()
   if (loading) return <div className="login"><div className="muted">Loading…</div></div>
   if (!user) return <LoginPage />
+  const mobile = location.pathname === '/m' || location.pathname.startsWith('/m/')
+  // A phone landing on the desktop root goes to the mobile view unless it asked for the desktop.
+  if (!mobile && location.pathname === '/' && window.innerWidth < 700 && !location.search.includes('desktop')) return <Navigate to="/m" replace />
+  if (mobile) {
+    return (
+      <RefProvider>
+        <Routes><Route path="/m/*" element={<MobileShell />} /></Routes>
+      </RefProvider>
+    )
+  }
   return (
     <RefProvider>
       <div className="shell">
@@ -80,6 +92,7 @@ function Shell() {
             ))}
           </nav>
           <div className="spacer" />
+          <NavLink to="/m" className="mobile-link">📱 Mobile view</NavLink>
           <ThemeToggle />
           <div className="me">
             <Avatar name={user.name} src={user.picture_url} />
