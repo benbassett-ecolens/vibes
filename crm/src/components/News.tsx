@@ -5,7 +5,8 @@ import { api, qs } from '../api'
 import { fmtDateTime } from '../format'
 import { useQuery } from '../hooks'
 import { ConfirmButton, useToast } from './ui'
-import type { CompanyNews } from '../../shared/types'
+import type { CompanyNews, PartnerKind } from '../../shared/types'
+import { COMPANY_KIND_LABEL } from '../../shared/types'
 
 /** Small, safe Markdown subset renderer (headings, lists, bold, links, paragraphs). No raw HTML. */
 export function Markdown({ text }: { text: string }) {
@@ -63,7 +64,7 @@ function NewsItem({ n, onDeleted, showCompany }: { n: CompanyNews; onDeleted: ()
       </div>
       {open && (
         <>
-          {showCompany && n.company_name && n.company_id && <div className="small muted">About <Link to={`/${n.scope_kind === 'erp' ? 'erps' : 'vars'}/${n.company_id}`}>{n.company_name}</Link></div>}
+          {showCompany && n.company_name && n.company_id && <div className="small muted">About <Link to={`${COMPANY_KIND_LABEL[n.scope_kind].path}/${n.company_id}`}>{n.company_name}</Link></div>}
           <Markdown text={n.answer} />
           {n.sources.length > 0 && (
             <div className="small muted" style={{ marginTop: 6 }}>
@@ -77,7 +78,8 @@ function NewsItem({ n, onDeleted, showCompany }: { n: CompanyNews; onDeleted: ()
 }
 
 /** Ask a natural-language question about one VAR (companyId) or all VARs (no companyId). Shows the history. */
-export function NewsCard({ companyId, kind = 'var', title }: { companyId?: string; kind?: 'var' | 'erp'; title?: string }) {
+export function NewsCard({ companyId, kind = 'var', title }: { companyId?: string; kind?: PartnerKind; title?: string }) {
+  const L = COMPANY_KIND_LABEL[kind]
   const toast = useToast()
   const status = useQuery(() => api.get<{ ai_configured: boolean }>('/api/vars/status'), [])
   const history = useQuery(() => api.get<{ items: CompanyNews[] }>(`/api/vars/news${qs({ company_id: companyId, kind: companyId ? undefined : kind })}`), [companyId, kind])
@@ -101,14 +103,16 @@ export function NewsCard({ companyId, kind = 'var', title }: { companyId?: strin
     ? ['What is the latest news on this company?', 'Any leadership changes or acquisitions in the last year?', kind === 'erp' ? 'What changed in their partner program or licensing this year?' : 'What products and ERP ecosystems do they focus on today?']
     : kind === 'erp'
       ? ['What is the latest news across our ERPs this month?', 'Which ERP publishers changed partner programs or pricing this year?', 'What major releases or acquisitions did our ERPs announce?']
-      : ['What is the latest news across our VARs this month?', 'Which of our VARs were acquired or raised money in the last year?', 'Which VARs announced new Acumatica or NetSuite practices?']
+      : kind === 'isv'
+        ? ['What is the latest news across our ISVs this month?', 'Which of our ISVs launched new products or integrations this year?', 'Which ISVs were acquired or raised money in the last year?']
+        : ['What is the latest news across our VARs this month?', 'Which of our VARs were acquired or raised money in the last year?', 'Which VARs announced new Acumatica or NetSuite practices?']
   return (
     <div className="card">
       <div className="card-h"><h2>{title ?? 'News & research'}</h2><span className="muted small right">asks Claude with live web search · answers are saved here</span></div>
       <div className="card-b">
         {status.data && !status.data.ai_configured && <div className="error-box" style={{ marginBottom: 10 }}>Not configured on the server. Add the Claude API key (see README → VAR news) and redeploy.</div>}
         <form onSubmit={ask} className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
-          <textarea className="textarea grow" rows={2} placeholder={companyId ? `Ask anything about this ${kind === 'erp' ? 'ERP' : 'VAR'}…` : `Ask anything about your ${kind === 'erp' ? 'ERPs' : 'VARs'}…`} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ask(e as unknown as React.FormEvent) }} />
+          <textarea className="textarea grow" rows={2} placeholder={companyId ? `Ask anything about this ${L.one}…` : `Ask anything about your ${L.many}…`} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ask(e as unknown as React.FormEvent) }} />
           <button className="btn primary" disabled={busy || !q.trim() || status.data?.ai_configured === false}>{busy ? 'Searching…' : 'Ask'}</button>
         </form>
         <div className="row wrap small" style={{ gap: 6, marginTop: 6 }}>

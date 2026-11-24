@@ -243,7 +243,7 @@ export function CompanyForm({ initial, kind, onClose, onSaved }: { initial?: Com
     owner_id: initial?.owner_id ?? user?.id ?? null,
     notes: initial?.notes ?? '',
     ecosystems: (initial?.ecosystems ?? []).join(', '),
-    partner_type: initial?.partner_type ?? (kind === 'var' ? 'VAR' : kind === 'erp' ? 'ERP' : ''),
+    partner_type: initial?.partner_type ?? (kind && kind !== 'company' ? kind.toUpperCase() : ''),
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)

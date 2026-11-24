@@ -24,6 +24,7 @@ const NAV = [
   { to: '/companies', label: 'Companies', ico: '▣' },
   { to: '/vars', label: 'VARs', ico: '◈' },
   { to: '/erps', label: 'ERPs', ico: '◇' },
+  { to: '/isvs', label: 'ISVs', ico: '◆' },
   { to: '/activities', label: 'Tasks & activity', ico: '✓' },
   { to: '/reports', label: 'Reports', ico: '▥' },
   { to: '/settings', label: 'Settings', ico: '⚙' },
@@ -103,6 +104,8 @@ function Shell() {
             <Route path="/vars/:id" element={<CompanyDetail />} />
             <Route path="/erps" element={<PartnersPage kind="erp" />} />
             <Route path="/erps/:id" element={<CompanyDetail />} />
+            <Route path="/isvs" element={<PartnersPage kind="isv" />} />
+            <Route path="/isvs/:id" element={<CompanyDetail />} />
             <Route path="/activities" element={<ActivitiesPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/settings" element={<SettingsPage />} />

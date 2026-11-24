@@ -6,7 +6,7 @@ import { badRequest, forbidden, notFound, parse, wrap } from '../http.js'
 import { aiConfigured, askNews, type NewsCompany } from '../ai/news.js'
 import type { CompanyNews } from '../../shared/types.js'
 
-/** VAR/ERP endpoints. The records themselves are companies with kind = 'var' | 'erp' (see /api/companies?kind=…). */
+/** VAR/ERP/ISV endpoints. The records themselves are companies with kind = 'var' | 'erp' | 'isv' (see /api/companies?kind=…). */
 export const varsRouter = Router()
 
 const NEWS_SELECT = `SELECT n.id, n.company_id, co.name AS company_name, n.scope_kind, n.question, n.answer, n.sources, n.model, n.created_at, u.name AS created_by_name
@@ -14,7 +14,7 @@ const NEWS_SELECT = `SELECT n.id, n.company_id, co.name AS company_name, n.scope
 
 const askSchema = z.object({ question: z.string().trim().min(3).max(1000) })
 
-const kindOf = (v: unknown): 'var' | 'erp' => (v === 'erp' ? 'erp' : 'var')
+const kindOf = (v: unknown): 'var' | 'erp' | 'isv' => (v === 'erp' ? 'erp' : v === 'isv' ? 'isv' : 'var')
 
 async function loadVar(id: string): Promise<NewsCompany & { id: string; kind: string }> {
   const c = await one<NewsCompany & { id: string; kind: string }>('SELECT id, kind, name, domain, website, ecosystems, partner_type, notes FROM companies WHERE id = $1 AND archived_at IS NULL', [id])
@@ -63,14 +63,14 @@ varsRouter.post(
   '/news/ask',
   wrap(async (req, res) => {
     if (!aiConfigured()) throw forbidden('News search is not configured. Set ANTHROPIC_API_KEY on the server.')
-    const body = parse(askSchema.extend({ kind: z.enum(['var', 'erp']).optional(), company_ids: z.array(z.string().uuid()).max(40).optional() }), req.body)
+    const body = parse(askSchema.extend({ kind: z.enum(['var', 'erp', 'isv']).optional(), company_ids: z.array(z.string().uuid()).max(40).optional() }), req.body)
     const kind = body.kind ?? 'var'
     const companies = await query<NewsCompany & { id: string }>(
       `SELECT id, name, domain, website, ecosystems, partner_type, notes FROM companies
        WHERE kind = $2 AND archived_at IS NULL ${body.company_ids?.length ? 'AND id = ANY($1::uuid[])' : 'AND $1::uuid[] IS NULL'} ORDER BY name LIMIT 40`,
       [body.company_ids?.length ? body.company_ids : null, kind],
     )
-    if (!companies.length) throw badRequest(`There are no ${kind === 'erp' ? 'ERP' : 'VAR'} records to ask about yet`)
+    if (!companies.length) throw badRequest(`There are no ${kind.toUpperCase()} records to ask about yet`)
     const result = await askNews(body.question, companies, kind)
     const row = (await one<{ id: string }>(
       'INSERT INTO company_news (company_id, scope_kind, question, answer, sources, model, created_by) VALUES (NULL, $1, $2, $3, $4, $5, $6) RETURNING id',

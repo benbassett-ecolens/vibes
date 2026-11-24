@@ -126,10 +126,10 @@ A named match is logged straight away as a `text` activity (source `gmail`, scre
 *Text messages by email* with a deal dropdown. The previous Slack share-to-channel path was removed
 (migration 014 drops its table); Slack keeps the to-do sync only.
 
-## VARs, ERPs and news search
+## VARs, ERPs, ISVs and news search
 
-Value-added resellers and ERP publishers get their own record types: **VARs** and **ERPs** in the
-sidebar, backed by `companies.kind = 'var' | 'erp'` so contacts, deals, email matching, the org chart
+Value-added resellers, ERP publishers and independent software vendors get their own record types:
+**VARs**, **ERPs** and **ISVs** in the sidebar, backed by `companies.kind = 'var' | 'erp' | 'isv'` so contacts, deals, email matching, the org chart
 and the timeline work unchanged. The Companies page hides
 VARs; the VAR page lists them with ecosystems, contacts and notes; the company picker on deals shows
 both. Imported rows whose partner type contains "VAR" land there (migration 011 backfills).

@@ -7,11 +7,11 @@ import { CompanyForm } from '../components/Forms'
 import { NewsCard } from '../components/News'
 import { OwnerSelect } from '../components/Pickers'
 import { Pager, SortableTable, useSort, type Column } from '../components/ui'
-import type { Company, CompanyKind, Paged } from '../../shared/types'
+import type { Company, CompanyKind, Paged, PartnerKind } from '../../shared/types'
 import { COMPANY_KIND_LABEL } from '../../shared/types'
 
 /** VARs and ERPs share one list page: the only difference is the record kind. */
-export function PartnersPage({ kind }: { kind: 'var' | 'erp' }) {
+export function PartnersPage({ kind }: { kind: PartnerKind }) {
   const L = COMPANY_KIND_LABEL[kind as CompanyKind]
   const navigate = useNavigate()
   const { sort, dir, toggle } = useSort('name')
@@ -50,7 +50,7 @@ export function PartnersPage({ kind }: { kind: 'var' | 'erp' }) {
           </select>
         </div>
         <div className="card" style={{ marginBottom: 16 }}>
-          <SortableTable columns={columns} rows={data?.items ?? []} sort={sort} dir={dir} onSort={toggle} onRowClick={(c) => navigate(`${L.path}/${c.id}`)} loading={loading} empty={kind === 'var' ? 'No VARs yet. Add one, or import your pipeline sheet: rows typed VAR land here.' : 'No ERPs yet. Add the publishers your partners sell: Microsoft, Acumatica, NetSuite, Sage, SAP…'} />
+          <SortableTable columns={columns} rows={data?.items ?? []} sort={sort} dir={dir} onSort={toggle} onRowClick={(c) => navigate(`${L.path}/${c.id}`)} loading={loading} empty={kind === 'var' ? 'No VARs yet. Add one, or import your pipeline sheet: rows typed VAR land here.' : kind === 'erp' ? 'No ERPs yet. Add the publishers your partners sell: Microsoft, Acumatica, NetSuite, Sage, SAP…' : 'No ISVs yet. Add the software vendors that build add-ons for your ecosystems; imported rows typed ISV land here.'} />
           <Pager total={data?.total ?? 0} limit={50} offset={offset} onChange={setOffset} />
         </div>
         <NewsCard kind={kind} title={`News across all ${L.many}`} />

@@ -184,11 +184,13 @@ export interface Attachment {
   size: number
 }
 
-export type CompanyKind = 'company' | 'var' | 'erp'
+export type CompanyKind = 'company' | 'var' | 'erp' | 'isv'
+export type PartnerKind = Exclude<CompanyKind, 'company'>
 export const COMPANY_KIND_LABEL: Record<CompanyKind, { one: string; many: string; sub: string; path: string }> = {
   company: { one: 'company', many: 'Companies', sub: 'customers and prospects', path: '/companies' },
   var: { one: 'VAR', many: 'VARs', sub: 'value-added resellers', path: '/vars' },
   erp: { one: 'ERP', many: 'ERPs', sub: 'ERP publishers', path: '/erps' },
+  isv: { one: 'ISV', many: 'ISVs', sub: 'independent software vendors', path: '/isvs' },
 }
 
 /** A news question about a VAR/ERP (or all of them) answered by Claude with web search. */
